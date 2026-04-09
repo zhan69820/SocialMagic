@@ -70,6 +70,50 @@ export interface ScrapeResult {
   error?: string;
 }
 
+/**
+ * Structured representation of a scraped web page.
+ * Used internally by the scraper module and returned to API routes.
+ */
+export interface ScrapedContent {
+  /** Page title extracted from <title> or OG meta */
+  title: string;
+  /** Main body content in clean Markdown format */
+  markdown: string;
+  /** Optional meta description */
+  description?: string;
+  /** Canonical or OG URL (may differ from request URL after redirects) */
+  url: string;
+  /** Extracted image URLs from the page */
+  images: string[];
+  /** Word count of the extracted content */
+  wordCount: number;
+  /** Source URL that was originally requested */
+  sourceUrl: string;
+}
+
+// -----------------------------------------------------------------------------
+// Generator Configuration
+// -----------------------------------------------------------------------------
+
+/**
+ * Configuration object that drives the copy generation pipeline.
+ * Passed from the API route to the generator to assemble prompts and call LLMs.
+ */
+export interface GeneratorConfig {
+  /** Which platforms to generate copy for */
+  platforms: Platform[];
+  /** Per-platform tone overrides; falls back to platform default if omitted */
+  toneOverrides: ToneOverrides;
+  /** Which LLM provider to use */
+  provider: "openai" | "anthropic";
+  /** Optional model override (e.g. "gpt-4o-mini", "claude-haiku-4-5-20251001") */
+  model?: string;
+  /** Temperature for generation (0.0 – 1.0). Per-platform overrides apply first */
+  temperature?: number;
+  /** Maximum tokens the LLM may return per platform call */
+  maxTokens?: number;
+}
+
 // -----------------------------------------------------------------------------
 // File Upload
 // -----------------------------------------------------------------------------

@@ -32,6 +32,8 @@ Full-stack web application for generating social media copywriting content.
 - Development order: Types → Database Schema → API Routes → Server Actions → UI Components
 - Never start a UI component until its data contracts (types + API) are finalized
 - Every module must be independently testable via its typed interface
+- **Blueprint-first**: Before modifying any core API logic, the logic flow diagram in `blueprint.md` must be updated first. No API code changes without an up-to-date blueprint.
+- **No placeholder comments**: `// TODO`, `// FIXME`, `// placeholder`, `// implement later`, and similar stub comments are strictly forbidden. Every function must have a complete, working implementation. If a function cannot be implemented yet, the entire module should be deferred — never merge incomplete code.
 
 ## Git-Workflow Rule
 
