@@ -95,17 +95,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<IngestRes
   try {
     const supabase = createServerClient();
 
-    // Upsert profile (creates if not exists, no-op if already present)
-    await supabase.from("profiles").upsert(
-      { anon_id: anonId },
-      { onConflict: "anon_id", ignoreDuplicates: true }
-    );
-
-    // Fetch the profile to get its UUID
+    // Upsert profile and return its UUID in a single round-trip
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
+      .upsert(
+        { anon_id: anonId },
+        { onConflict: "anon_id", ignoreDuplicates: true }
+      )
       .select("id")
-      .eq("anon_id", anonId)
       .single();
 
     if (profileError || !profile) {
