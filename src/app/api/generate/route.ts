@@ -1,29 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/client";
-import { generateCopies, type GenerationResult } from "@/lib/services/generator.service";
+import {
+  generateCopies,
+  truncateContent,
+  type GenerationResult,
+  type GenerationError,
+} from "@/lib/services/generator.service";
 import type {
   Platform,
   GeneratorConfig,
   ToneOverrides,
-  Content,
-  SocialPost,
 } from "@/types/index";
 
 // ---------------------------------------------------------------------------
 // POST /api/generate
 //
 // Flow:
-//   1. Parse { contentId, config } from request body
-//   2. Verify identity via anon_id → lookup profile
-//   3. Fetch source content from DB (contents table)
-//   4. Resolve API key for the selected provider
-//   5. Call generator → produce copy for each platform
-//   6. Persist results to social_posts table
-//   7. Return all generated copies
+//   1. Parse { contentId, config, apiKey } from request body
+//   2. Verify anonymous user identity via x-anon-id header
+//   3. Upsert profile (single RTT) → fetch source content from contents table
+//   4. Truncate source to 5000 chars to prevent token overflow
+//   5. Call generateCopies → Promise.allSettled per platform
+//   6. Persist each successful copy to social_posts (with alchemy_success_rate)
+//   7. Return { copies, errors } — successes and failures separated
 // ---------------------------------------------------------------------------
 
 interface GenerateRequestBody {
   contentId: string;
+  sourceText?: string;
   config: {
     platforms: Platform[];
     toneOverrides?: ToneOverrides;
@@ -35,9 +39,15 @@ interface GenerateRequestBody {
   apiKey: string;
 }
 
+interface CopyResponse extends GenerationResult {
+  id: string;
+  version: number;
+}
+
 interface GenerateSuccessResponse {
   success: true;
-  copies: Array<GenerationResult & { id: string; version: number }>;
+  copies: CopyResponse[];
+  errors: GenerationError[];
 }
 
 interface GenerateErrorResponse {
@@ -92,14 +102,14 @@ export async function POST(
     );
   }
 
-  // --- 2. Supabase operations ---
+  // --- 2. Resolve identity & fetch source content ---
   let sourceText: string;
   let profileId: string;
 
   try {
     const supabase = createServerClient();
 
-    // Verify identity — upsert + select in one RTT
+    // Upsert profile + return UUID in one round-trip
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .upsert({ anon_id: anonId }, { onConflict: "anon_id", ignoreDuplicates: true })
@@ -114,7 +124,7 @@ export async function POST(
     }
     profileId = profile.id;
 
-    // Fetch source content
+    // Fetch source content from DB
     const { data: contentRow, error: contentError } = await supabase
       .from("contents")
       .select("raw_text, profile_id")
@@ -137,17 +147,8 @@ export async function POST(
 
     sourceText = contentRow.raw_text;
   } catch {
-    // Supabase not configured — check if content is in the request
-    if (!body.contentId) {
-      return NextResponse.json(
-        { success: false, error: "数据库连接失败，无法获取素材内容" },
-        { status: 503 }
-      );
-    }
-
-    // For development without Supabase: we need the source text passed somehow
-    // Since we can't fetch from DB, require it in the request
-    const fallbackText = (body as unknown as Record<string, unknown>).sourceText as string | undefined;
+    // Supabase not configured — accept sourceText from request body
+    const fallbackText = body.sourceText;
     if (!fallbackText) {
       return NextResponse.json(
         { success: false, error: "数据库未配置，请在请求中附带 sourceText 字段" },
@@ -158,7 +159,10 @@ export async function POST(
     profileId = anonId;
   }
 
-  // --- 3. Call generator ---
+  // --- 3. Truncate source to prevent token overflow ---
+  sourceText = truncateContent(sourceText);
+
+  // --- 4. Call generator (Promise.allSettled inside) ---
   const generatorConfig: GeneratorConfig = {
     platforms: config.platforms,
     toneOverrides: config.toneOverrides ?? {},
@@ -168,29 +172,21 @@ export async function POST(
     maxTokens: config.maxTokens,
   };
 
-  let results: GenerationResult[];
-  try {
-    results = await generateCopies(sourceText, generatorConfig, apiKey);
-  } catch (err) {
-    return NextResponse.json(
-      { success: false, error: `文案生成失败: ${(err as Error).message}` },
-      { status: 502 }
-    );
-  }
+  const batch = await generateCopies(sourceText, generatorConfig, apiKey);
 
-  // --- 4. Persist to social_posts ---
-  const responseCopies: Array<GenerationResult & { id: string; version: number }> = [];
+  // --- 5. Persist successful copies to social_posts ---
+  const responseCopies: CopyResponse[] = [];
 
   try {
     const supabase = createServerClient();
 
-    for (const result of results) {
-      // Determine next version number for this content_id + platform combo
+    for (const copy of batch.copies) {
+      // Determine next version number
       const { count } = await supabase
         .from("social_posts")
         .select("*", { count: "exact", head: true })
         .eq("content_id", contentId)
-        .eq("platform", result.platform);
+        .eq("platform", copy.platform);
 
       const version = (count ?? 0) + 1;
 
@@ -199,41 +195,46 @@ export async function POST(
         .insert({
           profile_id: profileId,
           content_id: contentId,
-          platform: result.platform,
-          body: result.body,
-          tone: result.tone,
-          model: result.model,
+          platform: copy.platform,
+          body: copy.body,
+          tone: copy.tone,
+          model: copy.model,
           version,
-          token_count: result.tokenCount,
-          char_count: result.charCount,
+          token_count: copy.tokenCount,
+          char_count: copy.charCount,
+          metadata: { alchemy_success_rate: copy.alchemySuccessRate },
         })
         .select("id")
         .single();
 
       if (insertError) {
-        // Log but don't fail — still return the generated content
         console.error("Failed to persist social_post:", insertError.message);
       }
 
       responseCopies.push({
-        ...result,
+        ...copy,
         id: inserted?.id ?? crypto.randomUUID(),
         version,
       });
     }
   } catch {
-    // Supabase not available — return results without persistence
-    for (const result of results) {
+    // Supabase not available — return without persistence
+    for (const copy of batch.copies) {
       responseCopies.push({
-        ...result,
+        ...copy,
         id: crypto.randomUUID(),
         version: 1,
       });
     }
   }
 
+  // --- 6. Return structured response ---
   return NextResponse.json(
-    { success: true, copies: responseCopies },
+    {
+      success: true,
+      copies: responseCopies,
+      errors: batch.errors,
+    },
     { status: 201 }
   );
 }
