@@ -21,8 +21,8 @@ import type {
 //   3. Upsert profile (single RTT) → fetch source content from contents table
 //   4. Truncate source to 5000 chars to prevent token overflow
 //   5. Call generateCopies → Promise.allSettled per platform
-//   6. Persist each successful copy to social_posts (with alchemy_success_rate)
-//   7. Return { copies, errors } — successes and failures separated
+//   6. Persist each successful copy to social_posts via atomic .rpc() versioning
+//   7. Return { copies, errors } — copies only contains DB-confirmed records
 // ---------------------------------------------------------------------------
 
 interface GenerateRequestBody {
@@ -105,6 +105,7 @@ export async function POST(
   // --- 2. Resolve identity & fetch source content ---
   let sourceText: string;
   let profileId: string;
+  let dbAvailable = false;
 
   try {
     const supabase = createServerClient();
@@ -146,6 +147,7 @@ export async function POST(
     }
 
     sourceText = contentRow.raw_text;
+    dbAvailable = true;
   } catch {
     // Supabase not configured — accept sourceText from request body
     const fallbackText = body.sourceText;
@@ -175,20 +177,30 @@ export async function POST(
   const batch = await generateCopies(sourceText, generatorConfig, apiKey);
 
   // --- 5. Persist successful copies to social_posts ---
+  // INVARIANT: responseCopies ONLY contains records that were 100% confirmed
+  // written to the database. Any insert failure is moved to errors.
   const responseCopies: CopyResponse[] = [];
+  const allErrors: GenerationError[] = [...batch.errors];
 
-  try {
+  if (dbAvailable) {
     const supabase = createServerClient();
 
     for (const copy of batch.copies) {
-      // Determine next version number
-      const { count } = await supabase
-        .from("social_posts")
-        .select("*", { count: "exact", head: true })
-        .eq("content_id", contentId)
-        .eq("platform", copy.platform);
+      // --- Bug B fix: atomic version via DB function ---
+      const { data: versionResult, error: rpcError } = await supabase.rpc(
+        "get_next_post_version",
+        { content_uuid: contentId, platform_name: copy.platform }
+      );
 
-      const version = (count ?? 0) + 1;
+      if (rpcError || typeof versionResult !== "number") {
+        allErrors.push({
+          platform: copy.platform,
+          message: `版本号获取失败: ${rpcError?.message ?? "unknown"}`,
+        });
+        continue;
+      }
+
+      const version = versionResult;
 
       const { data: inserted, error: insertError } = await supabase
         .from("social_posts")
@@ -207,23 +219,30 @@ export async function POST(
         .select("id")
         .single();
 
-      if (insertError) {
-        console.error("Failed to persist social_post:", insertError.message);
+      // --- Bug A fix: on insert failure, move to errors — never return a fake ID ---
+      if (insertError || !inserted?.id) {
+        allErrors.push({
+          platform: copy.platform,
+          message: `数据库写入失败: ${insertError?.message ?? "unknown"}`,
+        });
+        continue;
       }
 
+      // Only reach here on confirmed DB write
       responseCopies.push({
         ...copy,
-        id: inserted?.id ?? crypto.randomUUID(),
+        id: inserted.id,
         version,
       });
     }
-  } catch {
-    // Supabase not available — return without persistence
+  } else {
+    // Supabase not available — return generated results without persistence
+    // (no fake DB IDs — we mark version as 0 to indicate un-persisted)
     for (const copy of batch.copies) {
       responseCopies.push({
         ...copy,
         id: crypto.randomUUID(),
-        version: 1,
+        version: 0,
       });
     }
   }
@@ -233,7 +252,7 @@ export async function POST(
     {
       success: true,
       copies: responseCopies,
-      errors: batch.errors,
+      errors: allErrors,
     },
     { status: 201 }
   );

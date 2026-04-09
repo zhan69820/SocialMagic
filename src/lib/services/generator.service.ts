@@ -129,24 +129,55 @@ export interface GenerationBatchResult {
 /**
  * Truncate source material to a safe character limit to prevent token overflow.
  * Preserves sentence boundaries when possible.
+ *
+ * Boundary detection rules:
+ * - Chinese: 。！？ treated as-is (no ambiguity)
+ * - English period: only matches when followed by space or newline (/\.\s/)
+ *   to avoid matching URLs (example.com), decimals (3.14), abbreviations (Dr.).
+ * - English exclamations / questions: matches ! or ? followed by space or newline
+ * - Newline: always a valid boundary
  */
 export function truncateContent(text: string, limit: number = MAX_SOURCE_LENGTH): string {
   if (text.length <= limit) return text;
 
   const truncated = text.slice(0, limit);
-  const lastSentenceEnd = Math.max(
-    truncated.lastIndexOf("。"),
-    truncated.lastIndexOf("！"),
-    truncated.lastIndexOf("？"),
-    truncated.lastIndexOf("."),
-    truncated.lastIndexOf("\n"),
-  );
 
-  if (lastSentenceEnd > limit * 0.7) {
-    return truncated.slice(0, lastSentenceEnd + 1) + "\n\n...(素材已截断)";
+  // Collect all valid sentence boundary positions
+  const boundaries: number[] = [];
+
+  // CJK sentence-enders: 。！？
+  for (const char of ["。", "！", "？"]) {
+    let pos = truncated.indexOf(char);
+    while (pos !== -1) {
+      boundaries.push(pos);
+      pos = truncated.indexOf(char, pos + 1);
+    }
   }
 
-  return truncated + "\n\n...(素材已截断)";
+  // English sentence-enders: period/exclamation/question followed by whitespace
+  const engSentenceEndRe = /[.!?](?=\s)/g;
+  let match: RegExpExecArray | null;
+  while ((match = engSentenceEndRe.exec(truncated)) !== null) {
+    boundaries.push(match.index);
+  }
+
+  // Newline boundaries
+  let nlPos = truncated.indexOf("\n");
+  while (nlPos !== -1) {
+    boundaries.push(nlPos);
+    nlPos = truncated.indexOf("\n", nlPos + 1);
+  }
+
+  // Find the latest boundary in the safe zone (> 70% of limit)
+  const threshold = Math.floor(limit * 0.7);
+  const validBoundaries = boundaries.filter((b) => b >= threshold);
+  const lastBoundary = validBoundaries.length > 0 ? Math.max(...validBoundaries) : -1;
+
+  if (lastBoundary > -1) {
+    return text.slice(0, lastBoundary + 1).trimEnd() + "\n\n...(素材已截断)";
+  }
+
+  return truncated.trimEnd() + "\n\n...(素材已截断)";
 }
 
 // =============================================================================
