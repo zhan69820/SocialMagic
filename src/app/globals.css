@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@theme {
+  --color-apple-gray: #F5F5F7;
+  --color-apple-blue: #0071E3;
+  --shadow-apple: 0 4px 24px rgba(0, 0, 0, 0.04);
+}
+
+@layer base {
+  body {
+    @apply bg-[--color-apple-gray] antialiased;
+  }
+}

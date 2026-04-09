@@ -25,8 +25,8 @@ export default function DashboardLayout({
       {/* ================================================================
           Desktop sidebar — 280px, fixed, glassmorphism 2.0
           ================================================================ */}
-      <aside className="hidden lg:flex lg:w-[280px] lg:shrink-0 lg:flex-col lg:fixed lg:inset-y-0 lg:left-0 z-30 p-2">
-        <div className="flex flex-col h-full rounded-2xl bg-white/10 backdrop-blur-xl border border-white/20 shadow-[0_8px_32px_rgba(0,0,0,0.08)]">
+      <aside className="hidden lg:flex fixed top-0 left-0 h-screen w-64 z-50 flex-col bg-white/70 backdrop-blur-xl border-r border-black/5">
+        <div className="flex flex-col h-full">
           {/* Logo area — 64px (8×8) top padding */}
           <div className="flex items-center gap-4 px-6 pt-8 pb-8">
             <div className="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/25">
@@ -148,7 +148,7 @@ export default function DashboardLayout({
       {/* ================================================================
           Main content area
           ================================================================ */}
-      <main className="flex-1 lg:ml-[280px] pt-16 lg:pt-0">
+      <main className="flex-1 lg:ml-64 pt-16 lg:pt-0">
         <div className="max-w-3xl mx-auto px-6 lg:px-8 py-8 lg:py-16">
           {children}
         </div>

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import "./globals.css";
 import { IdentityProvider } from "@/providers/identity-provider";
 
 export const metadata: Metadata = {
