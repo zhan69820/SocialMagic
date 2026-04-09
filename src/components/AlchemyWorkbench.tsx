@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useIdentity } from "@/providers/identity-provider";
 import SocialPostCard from "@/components/SocialPostCard";
+import VaultGrid, { resultsToVaultItems } from "@/components/VaultGrid";
 import type { Platform, Content } from "@/types/index";
 
 // =============================================================================
@@ -100,6 +101,7 @@ export default function AlchemyWorkbench() {
   const [content, setContent] = useState<Content | null>(null);
   const [selectedPlatforms, setSelectedPlatforms] = useState<Set<Platform>>(new Set());
   const [copies, setCopies] = useState<GeneratedCopy[]>([]);
+  const [vaultItems, setVaultItems] = useState<ReturnType<typeof resultsToVaultItems>>([]);
 
   // --- Animated progress text ---
   useEffect(() => {
@@ -174,14 +176,16 @@ export default function AlchemyWorkbench() {
         return;
       }
 
-      setCopies(
-        data.copies.map((c: GeneratedCopy & { platform: Platform }) => ({
-          platform: c.platform,
-          body: c.body,
-          tone: c.tone,
-          alchemySuccessRate: c.alchemySuccessRate,
-        }))
-      );
+      const mapped = data.copies.map((c: GeneratedCopy & { platform: Platform }) => ({
+        platform: c.platform,
+        body: c.body,
+        tone: c.tone,
+        alchemySuccessRate: c.alchemySuccessRate,
+      }));
+      setCopies(mapped);
+
+      // Push to vault
+      setVaultItems(resultsToVaultItems(mapped, content?.title ?? undefined));
       setPhase("done");
     } catch (err) {
       setErrorMsg((err as Error).message);
@@ -445,6 +449,11 @@ export default function AlchemyWorkbench() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Vault — always visible when there are items */}
+      <div className="w-full max-w-[600px]">
+        <VaultGrid newItems={vaultItems.length > 0 ? vaultItems : undefined} />
+      </div>
     </div>
   );
 }

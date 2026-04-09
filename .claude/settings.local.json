@@ -13,7 +13,9 @@
       "Bash(rm -f src/app/page_old.tsx src/app/ingest_page_old.tsx)",
       "Bash(rm -rf src/app/ingest)",
       "Bash(timeout 12 npx next dev --port 3099)",
-      "Bash(timeout 10 npx next dev --port 3099)"
+      "Bash(timeout 10 npx next dev --port 3099)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/)",
+      "Bash(curl -s http://localhost:3001/)"
     ]
   }
 }
