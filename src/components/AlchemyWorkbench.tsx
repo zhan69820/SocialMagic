@@ -1,64 +1,81 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
   Loader2,
   CheckCircle2,
   AlertCircle,
-  Copy,
-  Check,
   RefreshCw,
 } from "lucide-react";
 import { useIdentity } from "@/providers/identity-provider";
+import SocialPostCard from "@/components/SocialPostCard";
 import type { Platform, Content } from "@/types/index";
 
 // =============================================================================
-// Platform icon mapping — simple colored circles with abbreviations
+// Platform meta
 // =============================================================================
 
 const PLATFORM_META: Record<
   Platform,
-  { label: string; abbr: string; color: string; bgActive: string }
+  { label: string; glyph: string; color: string; bgActive: string; ringActive: string }
 > = {
   xiaohongshu: {
     label: "小红书",
-    abbr: "红",
+    glyph: "红",
     color: "text-red-500",
-    bgActive: "bg-red-50 border-red-200",
+    bgActive: "bg-red-50",
+    ringActive: "ring-red-200",
   },
   wechat: {
     label: "微信",
-    abbr: "微",
-    color: "text-green-500",
-    bgActive: "bg-green-50 border-green-200",
+    glyph: "微",
+    color: "text-green-600",
+    bgActive: "bg-green-50",
+    ringActive: "ring-green-200",
   },
   douyin: {
     label: "抖音",
-    abbr: "抖",
-    color: "text-gray-800",
-    bgActive: "bg-gray-100 border-gray-300",
+    glyph: "抖",
+    color: "text-gray-900",
+    bgActive: "bg-gray-50",
+    ringActive: "ring-gray-300",
   },
   weibo: {
     label: "微博",
-    abbr: "博",
+    glyph: "博",
     color: "text-orange-500",
-    bgActive: "bg-orange-50 border-orange-200",
+    bgActive: "bg-orange-50",
+    ringActive: "ring-orange-200",
   },
 };
 
 // =============================================================================
-// Progress messages for ingest flow
+// Ritual progress steps — 1.5s each
 // =============================================================================
 
-const PROGRESS_STEPS = [
+const INGEST_STEPS = [
   "正在连接源站...",
   "正在下载页面内容...",
   "正在提取精华...",
   "正在解析正文结构...",
-  "炼金原料已入库!",
+  "素材已入库",
 ];
+
+const RITUAL_STEPS = [
+  "正在解析结界内容...",
+  "正在调配文案配方...",
+  "文案正在凝固...",
+  "最后润色中...",
+];
+
+// =============================================================================
+// Spring config — Apple-style
+// =============================================================================
+
+const SPRING_ENTER = { type: "spring" as const, stiffness: 260, damping: 22 };
+const SPRING_TAP = { type: "spring" as const, stiffness: 500, damping: 28 };
 
 // =============================================================================
 // Main component
@@ -74,117 +91,81 @@ interface GeneratedCopy {
 }
 
 export default function AlchemyWorkbench() {
-  const { anonId, ready: identityReady } = useIdentity();
+  const { anonId } = useIdentity();
 
-  // URL input
   const [url, setUrl] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [progressMsg, setProgressMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
-
-  // Ingest result
   const [content, setContent] = useState<Content | null>(null);
-
-  // Platform selection
-  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<Platform>>(
-    new Set()
-  );
-
-  // Generation results
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<Platform>>(new Set());
   const [copies, setCopies] = useState<GeneratedCopy[]>([]);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // --- Ingest handler ---
+  // --- Animated progress text ---
+  useEffect(() => {
+    if (phase !== "ingesting" && phase !== "generating") return;
+
+    const steps = phase === "ingesting" ? INGEST_STEPS : RITUAL_STEPS;
+    setProgressMsg(steps[0]);
+
+    let idx = 0;
+    const timer = setInterval(() => {
+      idx++;
+      if (idx < steps.length) {
+        setProgressMsg(steps[idx]);
+      } else {
+        clearInterval(timer);
+      }
+    }, 1500);
+
+    return () => clearInterval(timer);
+  }, [phase]);
+
+  // --- Ingest ---
   const handleIngest = useCallback(async () => {
     if (!url.trim() || !anonId) return;
-
     setPhase("ingesting");
     setErrorMsg("");
     setContent(null);
     setCopies([]);
 
-    // Animate progress text
-    let stepIdx = 0;
-    const interval = setInterval(() => {
-      stepIdx++;
-      if (stepIdx < PROGRESS_STEPS.length) {
-        setProgressMsg(PROGRESS_STEPS[stepIdx]);
-      }
-    }, 800);
-    setProgressMsg(PROGRESS_STEPS[0]);
-
     try {
       const res = await fetch("/api/ingest", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-anon-id": anonId,
-        },
+        headers: { "Content-Type": "application/json", "x-anon-id": anonId },
         body: JSON.stringify({ url: url.trim() }),
       });
-
-      clearInterval(interval);
-
       const data = await res.json();
-
       if (!data.success) {
         setPhase("idle");
         setErrorMsg(data.error);
         return;
       }
-
       setContent(data.content);
-      setProgressMsg(PROGRESS_STEPS[PROGRESS_STEPS.length - 1]);
       setPhase("ingested");
     } catch (err) {
-      clearInterval(interval);
       setPhase("idle");
       setErrorMsg((err as Error).message);
     }
   }, [url, anonId]);
 
-  // --- Platform toggle ---
-  const togglePlatform = (p: Platform) => {
-    setSelectedPlatforms((prev) => {
-      const next = new Set(prev);
-      if (next.has(p)) next.delete(p);
-      else next.add(p);
-      return next;
-    });
-  };
-
-  // --- Copy to clipboard ---
-  const handleCopy = async (text: string, platformKey: string) => {
-    await navigator.clipboard.writeText(text);
-    setCopiedId(platformKey);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  // --- Generate handler ---
+  // --- Generate ---
   const handleGenerate = useCallback(async () => {
     if (!content || !anonId || selectedPlatforms.size === 0) return;
-
     setPhase("generating");
     setErrorMsg("");
 
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-anon-id": anonId,
-        },
+        headers: { "Content-Type": "application/json", "x-anon-id": anonId },
         body: JSON.stringify({
           contentId: content.id,
           sourceText: content.rawText,
-          config: {
-            platforms: Array.from(selectedPlatforms),
-            provider: "openai" as const,
-          },
+          config: { platforms: Array.from(selectedPlatforms), provider: "openai" },
           apiKey: "placeholder",
         }),
       });
-
       const data = await res.json();
 
       if (data.errors?.length > 0 && data.copies?.length === 0) {
@@ -208,45 +189,57 @@ export default function AlchemyWorkbench() {
     }
   }, [content, anonId, selectedPlatforms]);
 
+  // --- Reset ---
+  const reset = () => {
+    setPhase("idle");
+    setUrl("");
+    setContent(null);
+    setCopies([]);
+    setSelectedPlatforms(new Set());
+    setProgressMsg("");
+    setErrorMsg("");
+  };
+
   const canIngest = url.trim().length > 0 && phase === "idle";
-  const canGenerate = phase === "ingested" && selectedPlatforms.size > 0;
+  const canGenerate = (phase === "ingested" || phase === "generating") && selectedPlatforms.size > 0;
+  const showWorkbench = phase === "ingested" || phase === "generating";
 
   return (
     <div className="flex flex-col items-center">
-      {/* ---- Hero heading ---- */}
-      <motion.h1
+      {/* ================================================================
+          Hero
+          ================================================================ */}
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ ...SPRING_ENTER, delay: 0.05 }}
+        className="text-center mb-8"
+      >
+        <h1 className="text-[32px] md:text-[40px] font-bold tracking-tight text-gray-900">
+          SocialMagic
+        </h1>
+        <p className="mt-2 text-[15px] text-gray-400">投入素材，炼出黄金文案</p>
+      </motion.div>
+
+      {/* ================================================================
+          Spotlight input — Siri blue glow on focus
+          ================================================================ */}
+      <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-        className="text-3xl md:text-4xl font-bold tracking-tight text-gray-900 mb-2"
-      >
-        SocialMagic
-      </motion.h1>
-      <motion.p
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1, duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-        className="text-gray-400 text-sm mb-10"
-      >
-        投入素材，炼出黄金文案
-      </motion.p>
-
-      {/* ---- Spotlight-style URL input ---- */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.96 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.2, duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-        className="w-full max-w-2xl"
+        transition={{ ...SPRING_ENTER, delay: 0.15 }}
+        className="w-full max-w-[600px]"
       >
         <div
-          className={`
-            relative flex items-center gap-3 px-5 py-4 rounded-2xl
-            bg-white/80 backdrop-blur-2xl border border-white/60
-            shadow-[0_4px_24px_rgba(0,0,0,0.04)]
-            transition-shadow duration-300
-            focus-within:shadow-[0_0_0_4px_rgba(139,92,246,0.15),0_4px_24px_rgba(0,0,0,0.06)]
-            focus-within:border-violet-300/60
-          `}
+          className="
+            relative flex items-center gap-4 px-6 py-4
+            rounded-2xl bg-white/10 backdrop-blur-xl
+            border border-white/30
+            shadow-[0_8px_40px_rgba(0,0,0,0.08)]
+            transition-all duration-300
+            focus-within:border-[#0071E3]/30
+            focus-within:shadow-[0_0_0_4px_rgba(0,113,227,0.12),0_8px_40px_rgba(0,0,0,0.12)]
+          "
         >
           <Search className="w-5 h-5 text-gray-300 shrink-0" />
           <input
@@ -256,58 +249,71 @@ export default function AlchemyWorkbench() {
             onKeyDown={(e) => e.key === "Enter" && canIngest && handleIngest()}
             placeholder="粘贴文章或商品链接，开始炼金..."
             disabled={phase !== "idle"}
-            className="flex-1 bg-transparent outline-none text-sm text-gray-800 placeholder:text-gray-300 disabled:opacity-50"
+            className="flex-1 bg-transparent outline-none text-[15px] text-gray-800 placeholder:text-gray-300 disabled:opacity-40"
           />
-          {phase === "ingesting" && (
-            <Loader2 className="w-5 h-5 text-violet-500 animate-spin shrink-0" />
-          )}
           {phase === "idle" && (
-            <button
+            <motion.button
               onClick={handleIngest}
               disabled={!canIngest}
-              className="px-5 py-2 rounded-xl bg-violet-600 text-white text-sm font-medium hover:bg-violet-500 active:scale-[0.97] disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
+              whileTap={canIngest ? { scale: 0.95 } : {}}
+              className="px-6 py-2 rounded-xl bg-[#0071E3] text-white text-[13px] font-semibold hover:bg-[#0077ED] disabled:opacity-25 disabled:cursor-not-allowed transition-colors duration-200"
             >
               开始炼金
-            </button>
+            </motion.button>
+          )}
+          {(phase === "ingesting" || phase === "generating") && (
+            <Loader2 className="w-5 h-5 text-[#0071E3] animate-spin shrink-0" />
           )}
         </div>
       </motion.div>
 
-      {/* ---- Progress message ---- */}
-      <AnimatePresence>
-        {progressMsg && phase === "ingesting" && (
-          <motion.p
-            initial={{ opacity: 0, y: -8 }}
+      {/* ================================================================
+          Progress ritual — animated text
+          ================================================================ */}
+      <AnimatePresence mode="wait">
+        {(phase === "ingesting" || phase === "generating") && progressMsg && (
+          <motion.div
+            key={progressMsg}
+            initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="mt-4 text-sm text-violet-500 flex items-center gap-2"
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ ...SPRING_ENTER, duration: 0.4 }}
+            className="mt-4 flex items-center gap-2 text-[13px] text-[#0071E3]"
           >
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            {progressMsg}
-          </motion.p>
+            <span>{progressMsg}</span>
+          </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ---- Ingest success indicator ---- */}
+      {/* ================================================================
+          Ingest success → Platform selector + Generate
+          ================================================================ */}
       <AnimatePresence>
-        {(phase === "ingested" || phase === "generating") && content && (
+        {showWorkbench && content && (
           <motion.div
-            initial={{ opacity: 0, y: 12 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            className="w-full max-w-2xl mt-8"
+            exit={{ opacity: 0, y: -8 }}
+            transition={SPRING_ENTER}
+            className="w-full max-w-[600px] mt-8"
           >
-            <div className="flex items-center gap-2 text-sm text-emerald-600 mb-6">
+            {/* Success badge */}
+            <motion.div
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              transition={SPRING_ENTER}
+              className="flex items-center gap-2 text-[13px] text-emerald-600 mb-8"
+            >
               <CheckCircle2 className="w-4 h-4" />
               <span>
                 素材入库成功 — {content.wordCount} 字
                 {content.title ? ` · ${content.title}` : ""}
               </span>
-            </div>
+            </motion.div>
 
-            {/* ---- Platform selector ---- */}
-            <div className="mb-6">
-              <p className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-3">
+            {/* Platform selector */}
+            <div className="mb-8">
+              <p className="text-[11px] text-gray-400 uppercase tracking-wider font-medium mb-4">
                 选择目标平台
               </p>
               <div className="flex gap-3">
@@ -317,36 +323,38 @@ export default function AlchemyWorkbench() {
                   return (
                     <motion.button
                       key={p}
-                      onClick={() => togglePlatform(p)}
-                      whileTap={{ scale: 0.92 }}
+                      onClick={() => {
+                        setSelectedPlatforms((prev) => {
+                          const next = new Set(prev);
+                          next.has(p) ? next.delete(p) : next.add(p);
+                          return next;
+                        });
+                      }}
+                      whileTap={{ scale: 0.95 }}
                       animate={{
-                        scale: selected ? 1.08 : 1,
-                        opacity: selected ? 1 : 0.6,
+                        scale: selected ? 1.05 : 1,
                       }}
-                      transition={{
-                        type: "spring",
-                        stiffness: 500,
-                        damping: 25,
-                      }}
+                      transition={SPRING_TAP}
                       className={`
-                        flex flex-col items-center gap-1.5 px-5 py-4 rounded-2xl border transition-colors duration-200
+                        flex flex-col items-center gap-2 px-5 py-4 rounded-2xl
+                        border transition-colors duration-200
                         ${
                           selected
-                            ? `${meta.bgActive} shadow-sm`
-                            : "bg-white/60 border-white/40 hover:bg-white/80"
+                            ? `${meta.bgActive} ${meta.ringActive} ring-1 shadow-sm`
+                            : "bg-white/10 border-white/20 hover:bg-white/20"
                         }
                       `}
                     >
                       <span
-                        className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold ${
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold transition-colors duration-200 ${
                           selected ? meta.color : "text-gray-300"
                         }`}
                       >
-                        {meta.abbr}
+                        {meta.glyph}
                       </span>
                       <span
-                        className={`text-xs font-medium ${
-                          selected ? "text-gray-700" : "text-gray-400"
+                        className={`text-[12px] font-medium transition-colors duration-200 ${
+                          selected ? "text-gray-800" : "text-gray-400"
                         }`}
                       >
                         {meta.label}
@@ -357,42 +365,37 @@ export default function AlchemyWorkbench() {
               </div>
             </div>
 
-            {/* ---- Generate button ---- */}
+            {/* Generate button */}
             <motion.button
               onClick={handleGenerate}
-              disabled={!canGenerate && phase !== "generating"}
-              whileHover={canGenerate ? { scale: 1.02 } : {}}
-              whileTap={canGenerate ? { scale: 0.98 } : {}}
+              disabled={!canGenerate}
+              whileTap={canGenerate ? { scale: 0.97 } : {}}
               className={`
-                w-full py-4 rounded-2xl text-sm font-semibold transition-all duration-300
+                w-full py-4 rounded-2xl text-[15px] font-semibold transition-all duration-300
                 ${
-                  canGenerate || phase === "generating"
-                    ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-500/20 hover:shadow-violet-500/30"
-                    : "bg-gray-200/60 text-gray-400 cursor-not-allowed"
+                  canGenerate
+                    ? "bg-[#0071E3] text-white shadow-[0_4px_16px_rgba(0,113,227,0.25)] hover:shadow-[0_8px_24px_rgba(0,113,227,0.35)]"
+                    : "bg-gray-200/50 text-gray-400 cursor-not-allowed"
                 }
               `}
             >
-              {phase === "generating" ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  正在炼金...
-                </span>
-              ) : (
-                `炼出文案 (${selectedPlatforms.size} 个平台)`
-              )}
+              炼出文案 ({selectedPlatforms.size} 个平台)
             </motion.button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ---- Error display ---- */}
+      {/* ================================================================
+          Error
+          ================================================================ */}
       <AnimatePresence>
         {errorMsg && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="w-full max-w-2xl mt-4 flex items-start gap-2 p-4 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600"
+            exit={{ opacity: 0 }}
+            transition={SPRING_ENTER}
+            className="w-full max-w-[600px] mt-4 flex items-start gap-3 p-4 rounded-2xl bg-red-50/80 backdrop-blur-xl border border-red-100 text-[13px] text-red-600"
           >
             <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
             {errorMsg}
@@ -400,90 +403,39 @@ export default function AlchemyWorkbench() {
         )}
       </AnimatePresence>
 
-      {/* ---- Generated copy cards ---- */}
+      {/* ================================================================
+          Results — SocialPostCards
+          ================================================================ */}
       <AnimatePresence>
         {phase === "done" && copies.length > 0 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="w-full max-w-2xl mt-8 space-y-4"
+            className="w-full max-w-[600px] mt-8 space-y-4"
           >
-            <p className="text-xs text-gray-400 uppercase tracking-wider font-medium">
+            <p className="text-[11px] text-gray-400 uppercase tracking-wider font-medium">
               炼金结果
             </p>
-            {copies.map((copy, i) => {
-              const meta = PLATFORM_META[copy.platform];
-              return (
-                <motion.div
-                  key={copy.platform}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{
-                    delay: i * 0.08,
-                    type: "spring",
-                    stiffness: 300,
-                    damping: 24,
-                  }}
-                  className="p-5 rounded-2xl bg-white/70 backdrop-blur-xl border border-white/50 shadow-[0_2px_16px_rgba(0,0,0,0.04)]"
-                >
-                  {/* Card header */}
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold ${meta.color} ${meta.bgActive}`}
-                      >
-                        {meta.abbr}
-                      </span>
-                      <span className="text-sm font-medium text-gray-700">
-                        {meta.label}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-gray-400">
-                        {copy.alchemySuccessRate}% 炼金度
-                      </span>
-                      <button
-                        onClick={() => handleCopy(copy.body, copy.platform)}
-                        className="flex items-center gap-1 text-xs text-gray-400 hover:text-violet-600 transition"
-                      >
-                        {copiedId === copy.platform ? (
-                          <>
-                            <Check className="w-3.5 h-3.5 text-emerald-500" />
-                            <span className="text-emerald-500">已复制</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3.5 h-3.5" />
-                            复制
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
 
-                  {/* Copy body */}
-                  <div className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto pr-2">
-                    {copy.body}
-                  </div>
-                </motion.div>
-              );
-            })}
+            {copies.map((copy, i) => (
+              <SocialPostCard
+                key={copy.platform}
+                platform={copy.platform}
+                body={copy.body}
+                tone={copy.tone}
+                alchemySuccessRate={copy.alchemySuccessRate}
+                index={i}
+              />
+            ))}
 
-            {/* Reset button */}
+            {/* Reset */}
             <motion.button
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: copies.length * 0.08 + 0.2 }}
-              onClick={() => {
-                setPhase("idle");
-                setUrl("");
-                setContent(null);
-                setCopies([]);
-                setSelectedPlatforms(new Set());
-                setProgressMsg("");
-                setErrorMsg("");
-              }}
-              className="w-full py-3 rounded-2xl border border-gray-200 text-sm text-gray-400 hover:text-gray-600 hover:border-gray-300 transition"
+              transition={{ delay: copies.length * 0.1 + 0.15 }}
+              onClick={reset}
+              whileTap={{ scale: 0.97 }}
+              className="w-full py-3 rounded-2xl border border-gray-200/60 text-[13px] text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors duration-200"
             >
               <span className="flex items-center justify-center gap-2">
                 <RefreshCw className="w-4 h-4" />
