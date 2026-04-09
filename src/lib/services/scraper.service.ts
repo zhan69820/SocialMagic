@@ -1,6 +1,6 @@
-import { fetchPage } from "../scraper/fetch-page.js";
-import { extractContent } from "../scraper/extract-content.js";
-import type { ScrapedContent, ScrapeResult } from "@/types/index.js";
+import { fetchPage } from "../scraper/fetch-page";
+import { extractContent } from "../scraper/extract-content";
+import type { ScrapedContent, ScrapeResult } from "@/types/index";
 
 /**
  * ScraperService — thin service layer that wraps the low-level scraper

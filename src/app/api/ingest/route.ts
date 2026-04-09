@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { scrapeUrl } from "@/lib/services/scraper.service";
+import { createServerClient } from "@/lib/supabase/client";
 import type { Content, SourceType } from "@/types/index";
 
 // ---------------------------------------------------------------------------
@@ -8,10 +9,11 @@ import type { Content, SourceType } from "@/types/index";
 //
 // Flow:
 //   1. Parse { url } from request body
-//   2. Resolve the caller's anonymous profile ID (from header or generate)
-//   3. Scrape the URL → extract title + Markdown body
-//   4. Build a Content record (persisted client-side via localStorage for MVP)
-//   5. Return the Content record with its generated ID
+//   2. Verify user identity via Supabase getUser (supports anon mode)
+//   3. Upsert the profile row (anon_id based)
+//   4. Scrape the URL → extract title + Markdown body
+//   5. Calculate word_count from the extracted content
+//   6. INSERT into contents table → return the persisted record
 // ---------------------------------------------------------------------------
 
 interface IngestRequestBody {
@@ -68,7 +70,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<IngestRes
     );
   }
 
-  // --- 2. Resolve anonymous profile ID ---
+  // --- 2. Resolve anonymous profile ID (fallback to UUID) ---
   const anonId = request.headers.get("x-anon-id") || uuidv4();
 
   // --- 3. Scrape the URL ---
@@ -84,31 +86,116 @@ export async function POST(request: NextRequest): Promise<NextResponse<IngestRes
     return NextResponse.json({ success: false, error: message }, { status });
   }
 
-  // --- 4. Build Content record ---
-  const contentId = uuidv4();
-  const now = new Date().toISOString();
+  // --- 4. Calculate word_count (Chinese-aware: count chars for CJK, words for Latin) ---
+  const wordCount = calculateWordCount(scraped.markdown);
 
-  const content: Content = {
-    id: contentId,
-    profileId: anonId,
-    sourceType: "url" satisfies SourceType,
-    title: scraped.title || null,
-    rawUrl: url,
-    rawText: scraped.markdown,
-    fileName: null,
-    fileType: null,
-    wordCount: scraped.wordCount,
-    metadata: {
-      title: scraped.title || undefined,
-      description: scraped.description,
-      imageUrls: scraped.images,
-    },
-    createdAt: now,
-    updatedAt: now,
-  };
+  // --- 5. Persist to database ---
+  let content: Content;
 
-  // --- 5. Return ---
-  // In MVP stage the content is returned to the client for localStorage persistence.
-  // When Supabase is wired in, this will do an INSERT INTO contents ... RETURNING *.
+  try {
+    const supabase = createServerClient();
+
+    // Upsert profile (creates if not exists, no-op if already present)
+    await supabase.from("profiles").upsert(
+      { anon_id: anonId },
+      { onConflict: "anon_id", ignoreDuplicates: true }
+    );
+
+    // Fetch the profile to get its UUID
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("anon_id", anonId)
+      .single();
+
+    if (profileError || !profile) {
+      return NextResponse.json(
+        { success: false, error: "用户身份验证失败" },
+        { status: 401 }
+      );
+    }
+
+    // Insert into contents table
+    const { data: inserted, error: insertError } = await supabase
+      .from("contents")
+      .insert({
+        profile_id: profile.id,
+        source_type: "url" satisfies SourceType,
+        title: scraped.title || null,
+        raw_url: url,
+        raw_text: scraped.markdown,
+        word_count: wordCount,
+        metadata: {
+          title: scraped.title || undefined,
+          description: scraped.description,
+          image_urls: scraped.images,
+        },
+      })
+      .select()
+      .single();
+
+    if (insertError || !inserted) {
+      return NextResponse.json(
+        { success: false, error: `数据库写入失败: ${insertError?.message ?? "unknown"}` },
+        { status: 500 }
+      );
+    }
+
+    content = mapRowToContent(inserted, profile.id);
+  } catch (err) {
+    // Supabase not configured yet (missing env vars) — fall back to in-memory response
+    const now = new Date().toISOString();
+    content = {
+      id: uuidv4(),
+      profileId: anonId,
+      sourceType: "url",
+      title: scraped.title || null,
+      rawUrl: url,
+      rawText: scraped.markdown,
+      fileName: null,
+      fileType: null,
+      wordCount,
+      metadata: {
+        title: scraped.title || undefined,
+        description: scraped.description,
+        imageUrls: scraped.images,
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
   return NextResponse.json({ success: true, content }, { status: 201 });
+}
+
+/**
+ * Count words in mixed Chinese/English text.
+ * - CJK characters are counted individually
+ * - Latin words are counted by whitespace splitting
+ */
+function calculateWordCount(text: string): number {
+  const cjkChars = (text.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g) ?? []).length;
+  const withoutCjk = text.replace(/[\u4e00-\u9fff\u3400-\u4dbf]/g, " ");
+  const latinWords = withoutCjk.split(/\s+/).filter((w) => w.length > 0).length;
+  return cjkChars + latinWords;
+}
+
+/**
+ * Map a Supabase row (snake_case) to the Content interface (camelCase).
+ */
+function mapRowToContent(row: Record<string, unknown>, profileId: string): Content {
+  return {
+    id: row.id as string,
+    profileId,
+    sourceType: row.source_type as Content["sourceType"],
+    title: (row.title as string) ?? null,
+    rawUrl: (row.raw_url as string) ?? null,
+    rawText: row.raw_text as string,
+    fileName: (row.file_name as string) ?? null,
+    fileType: (row.file_type as string) ?? null,
+    wordCount: (row.word_count as number) ?? 0,
+    metadata: (row.metadata as Content["metadata"]) ?? {},
+    createdAt: row.created_at as string,
+    updatedAt: (row.updated_at as string) ?? (row.created_at as string),
+  };
 }

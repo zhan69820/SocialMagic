@@ -1,17 +1,7 @@
-import { fetchPage } from "./scraper/fetch-page.js";
-import { extractContent } from "./scraper/extract-content.js";
-import type { ScrapedContent, ScrapeResult } from "@/types/index.js";
+import { fetchPage } from "./scraper/fetch-page";
+import { extractContent } from "./scraper/extract-content";
+import type { ScrapedContent, ScrapeResult } from "@/types/index";
 
-/**
- * Scrape a web page and return its main content as clean Markdown.
- *
- * This is the primary entry point for the scraping pipeline:
- *   1. fetchPage() — HTTP GET with timeout, User-Agent, and redirect following
- *   2. extractContent() — Cheerio parsing → noise removal → Turndown Markdown conversion
- *
- * Returns a structured ScrapeResult that the API route can relay directly
- * to the client, or a ScrapedContent object for internal pipeline use.
- */
 export async function scrapeUrl(rawUrl: string): Promise<ScrapeResult> {
   try {
     const page = await fetchPage(rawUrl);
@@ -68,14 +58,10 @@ export async function scrapeUrl(rawUrl: string): Promise<ScrapeResult> {
   }
 }
 
-/**
- * Return the full structured ScrapedContent for internal use
- * (e.g., passing to the generator pipeline).
- */
 export async function scrapeUrlFull(rawUrl: string): Promise<ScrapedContent> {
   const page = await fetchPage(rawUrl);
   return extractContent(page.html, page.url, page.metadata);
 }
 
-export { fetchPage, extractContent } from "./scraper/index.js";
-export type { ScrapedContent } from "@/types/index.js";
+export { fetchPage, extractContent } from "./scraper/index";
+export type { ScrapedContent } from "@/types/index";

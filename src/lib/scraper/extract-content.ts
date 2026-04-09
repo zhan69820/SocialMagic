@@ -1,7 +1,6 @@
 import * as cheerio from "cheerio";
-import { Readability } from "@mozilla/readability";
 import TurndownService from "turndown";
-import type { ScrapedContent, SourceMetadata } from "@/types/index.js";
+import type { ScrapedContent, SourceMetadata } from "@/types/index";
 
 /**
  * Parse raw HTML into a clean Markdown document, extracting only the main
@@ -9,7 +8,7 @@ import type { ScrapedContent, SourceMetadata } from "@/types/index.js";
  *
  * Pipeline:
  *   1. Cheerio — remove <script>, <style>, <nav>, <footer>, <header> tags
- *   2. @mozilla/readability — extract the main content article
+ *   2. Main-content heuristic selectors
  *   3. Turndown — convert the remaining HTML to clean Markdown
  */
 export function extractContent(
@@ -19,15 +18,7 @@ export function extractContent(
 ): ScrapedContent {
   const $ = cheerio.load(html);
 
-  // Remove noise elements before passing to Readability
   $("script, style, nav, footer, header, aside, iframe, noscript").remove();
-
-  // JSDOM-like document for Readability: we build a minimal DOM string
-  // @mozilla/readability expects a DOM Document; in Node.js we use jsdom.
-  // However, to avoid adding jsdom as a heavy dependency (~2MB), we use
-  // a lightweight approach: extract the main content via Cheerio heuristics
-  // and fallback to Readability when jsdom is available.
-  // For now, we use Cheerio-based extraction which works well for most sites.
 
   const title = metadata?.title
     ?? $("title").first().text().trim()
@@ -40,10 +31,8 @@ export function extractContent(
     ? metadata.imageUrls
     : extractImages($, sourceUrl);
 
-  // Attempt to get main content via common article selectors
   const mainHtml = extractMainHtml($);
 
-  // Convert to Markdown via Turndown
   const turndown = new TurndownService({
     headingStyle: "atx",
     codeBlockStyle: "fenced",
@@ -65,10 +54,6 @@ export function extractContent(
   };
 }
 
-/**
- * Try common selectors for the main article / content area.
- * Falls back to <body> if nothing matches.
- */
 function extractMainHtml($: cheerio.CheerioAPI): string {
   const selectors = [
     "article",
@@ -92,7 +77,6 @@ function extractMainHtml($: cheerio.CheerioAPI): string {
     }
   }
 
-  // Fallback: use body content
   return $("body").html() ?? $.html();
 }
 
@@ -108,13 +92,11 @@ function extractOgDescription($: cheerio.CheerioAPI): string | undefined {
 function extractImages($: cheerio.CheerioAPI, baseUrl: string): string[] {
   const images: Set<string> = new Set();
 
-  // OG images first
   $('meta[property="og:image"]').each((_, el) => {
     const src = $(el).attr("content");
     if (src) images.add(resolveUrl(src, baseUrl));
   });
 
-  // Article images (top 5 by appearance)
   $("article img, main img, .post-content img").each((i, el) => {
     if (i >= 5) return false;
     const src = $(el).attr("src") ?? $(el).attr("data-src");

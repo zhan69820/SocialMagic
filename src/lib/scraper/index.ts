@@ -1,2 +1,2 @@
-export { fetchPage, type FetchedPage } from "./fetch-page.js";
-export { extractContent } from "./extract-content.js";
+export { fetchPage, type FetchedPage } from "./fetch-page";
+export { extractContent } from "./extract-content";

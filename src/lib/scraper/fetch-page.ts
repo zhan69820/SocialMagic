@@ -1,9 +1,24 @@
-import type { SourceMetadata } from "@/types/index.js";
-
-const DEFAULT_USER_AGENT =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+import type { SourceMetadata } from "@/types/index";
 
 const FETCH_TIMEOUT_MS = 10_000;
+
+/**
+ * Pool of real mobile User-Agent strings. One is picked at random per request
+ * to reduce the chance of being blocked by bot-detection systems.
+ */
+const MOBILE_USER_AGENTS = [
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+  "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.113 Mobile Safari/537.36",
+  "Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.113 Mobile Safari/537.36",
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
+  "Mozilla/5.0 (Linux; Android 13; M2101K6G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.179 Mobile Safari/537.36",
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/125.0.6422.80 Mobile/15E148 Safari/604.1",
+  "Mozilla/5.0 (Linux; Android 14; 23106RN0DA) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.113 Mobile Safari/537.36",
+];
+
+function randomMobileUA(): string {
+  return MOBILE_USER_AGENTS[Math.floor(Math.random() * MOBILE_USER_AGENTS.length)];
+}
 
 export interface FetchedPage {
   /** Final URL after any redirects */
@@ -18,7 +33,7 @@ export interface FetchedPage {
  * Fetch a web page and return its raw HTML together with basic metadata.
  *
  * - Follows redirects (up to 5 hops via native fetch).
- * - Sets a desktop User-Agent to avoid bot-blocking on most sites.
+ * - Random mobile User-Agent per request to reduce bot-detection risk.
  * - Times out after 10 seconds.
  * - Throws a typed error string on failure.
  */
@@ -37,12 +52,14 @@ export async function fetchPage(rawUrl: string): Promise<FetchedPage> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
+  const userAgent = randomMobileUA();
+
   let response: Response;
   try {
     response = await fetch(url.toString(), {
       signal: controller.signal,
       headers: {
-        "User-Agent": DEFAULT_USER_AGENT,
+        "User-Agent": userAgent,
         Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
       },
