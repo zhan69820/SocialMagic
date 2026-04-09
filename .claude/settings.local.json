@@ -7,7 +7,12 @@
       "Bash(npm init:*)",
       "Bash(npm install:*)",
       "Bash(npx tsc:*)",
-      "Bash(timeout 15 npx next dev --port 3099)"
+      "Bash(timeout 15 npx next dev --port 3099)",
+      "Bash(mv src/app/page.tsx src/app/page_old.tsx)",
+      "Bash(mv src/app/ingest/page.tsx src/app/ingest_page_old.tsx)",
+      "Bash(rm -f src/app/page_old.tsx src/app/ingest_page_old.tsx)",
+      "Bash(rm -rf src/app/ingest)",
+      "Bash(timeout 12 npx next dev --port 3099)"
     ]
   }
 }

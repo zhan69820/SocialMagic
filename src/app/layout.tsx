@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { IdentityProvider } from "@/providers/identity-provider";
 
 export const metadata: Metadata = {
   title: "SocialMagic",
@@ -12,7 +13,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN">
-      <body>{children}</body>
+      <body className="bg-[#F5F5F7] antialiased">
+        <IdentityProvider>{children}</IdentityProvider>
+      </body>
     </html>
   );
 }
