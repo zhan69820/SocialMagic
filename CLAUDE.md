@@ -26,6 +26,23 @@ Full-stack web application for generating social media copywriting content.
 - `npm run lint` — Run ESLint
 - `npm run type-check` — Run TypeScript type checking
 
+## Architecture-First Rule
+
+- **ALL UI development must be preceded by**: database schema design, core interface/type definitions, and API route logic
+- Development order: Types → Database Schema → API Routes → Server Actions → UI Components
+- Never start a UI component until its data contracts (types + API) are finalized
+- Every module must be independently testable via its typed interface
+
+## Git-Workflow Rule
+
+- After completing each independent functional module (e.g., schema definition, interface file, API route), IMMEDIATELY execute:
+  ```
+  git add -A && git commit -m "feat: <module_name>" && git push
+  ```
+- Commit message format: `feat: <module>` for new features, `fix: <module>` for bug fixes, `chore: <module>` for config/tooling
+- Each commit must represent one atomic, self-contained module
+- Always push to remote after each commit — no local-only accumulations
+
 ## Code Style
 
 - Functional components with named exports
