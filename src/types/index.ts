@@ -115,6 +115,48 @@ export interface GeneratorConfig {
 }
 
 // -----------------------------------------------------------------------------
+// Database Row Types — mirror the SQL schema in supabase/migrations/20260409_init.sql
+// -----------------------------------------------------------------------------
+
+/**
+ * A persisted content record in the `contents` table.
+ * Represents a scraped URL, uploaded file, or manually entered text.
+ */
+export interface Content {
+  id: string;
+  profileId: string;
+  sourceType: SourceType;
+  title: string | null;
+  rawUrl: string | null;
+  rawText: string;
+  fileName: string | null;
+  fileType: string | null;
+  wordCount: number;
+  metadata: SourceMetadata;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * A generated social media post in the `social_posts` table.
+ * Each row is one version of copy for one platform, linked to a source content.
+ */
+export interface SocialPost {
+  id: string;
+  profileId: string;
+  contentId: string;
+  platform: Platform;
+  body: string;
+  tone: string;
+  model: string;
+  version: number;
+  tokenCount: number;
+  charCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// -----------------------------------------------------------------------------
 // File Upload
 // -----------------------------------------------------------------------------
 
