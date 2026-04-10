@@ -5,12 +5,12 @@ import { createServerClient } from "@/lib/supabase/client";
 // POST /api/profiles/init
 //
 // Ensures a profile row exists for the given anon_id.
-// Called by the client-side IdentityProvider on first load.
-// Returns the profile row on success.
+// Optionally accepts api_keys JSONB to persist provider configuration.
 // ---------------------------------------------------------------------------
 
 interface InitRequest {
   anon_id: string;
+  api_keys?: Record<string, unknown>;
 }
 
 interface InitSuccessResponse {
@@ -38,7 +38,7 @@ export async function POST(
     );
   }
 
-  const { anon_id } = body;
+  const { anon_id, api_keys } = body;
 
   if (!anon_id || typeof anon_id !== "string") {
     return NextResponse.json(
@@ -50,23 +50,31 @@ export async function POST(
   try {
     const supabase = createServerClient();
 
+    // Build update payload — only include api_keys if provided
+    const updatePayload: Record<string, unknown> = { anon_id };
+    if (api_keys !== undefined) {
+      updatePayload.api_keys = api_keys;
+    }
+
     const { data, error } = await supabase
       .from("profiles")
-      .upsert({ anon_id }, { onConflict: "anon_id", ignoreDuplicates: true })
+      .upsert(updatePayload, { onConflict: "anon_id" })
       .select("id, anon_id")
       .single();
 
     if (error || !data) {
       return NextResponse.json(
-        { success: false, error: `用户初始化失败: ${error?.message ?? "unknown"}` },
+        {
+          success: false,
+          error: `用户初始化失败: ${error?.message ?? "unknown"}`,
+        },
         { status: 500 }
       );
     }
 
     return NextResponse.json({ success: true, profile: data });
   } catch {
-    // Supabase not configured — return a synthetic success so the client
-    // can still function in local-only mode
+    // Supabase not configured — return synthetic success for offline mode
     return NextResponse.json({
       success: true,
       profile: { id: crypto.randomUUID(), anon_id },

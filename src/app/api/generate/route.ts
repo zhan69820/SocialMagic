@@ -1,29 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
+import { streamText } from "ai";
+import { v4 as uuidv4 } from "uuid";
 import { createServerClient } from "@/lib/supabase/client";
 import {
-  generateCopies,
+  createDynamicProvider,
   truncateContent,
+  computeAlchemyScore,
+  buildUserPrompt,
+  getDefaultTemperature,
+  PLATFORM_SYSTEM_PROMPTS,
   type GenerationResult,
-  type GenerationError,
 } from "@/lib/services/generator.service";
 import type {
   Platform,
-  GeneratorConfig,
   ToneOverrides,
+  ProviderType,
 } from "@/types/index";
+import { PLATFORM_DEFAULTS } from "@/types/index";
 
 // ---------------------------------------------------------------------------
-// POST /api/generate
+// POST /api/generate — SSE streaming
 //
-// Flow:
-//   1. Parse { contentId, config, apiKey } from request body
-//   2. Verify anonymous user identity via x-anon-id header
-//   3. Upsert profile (single RTT) → fetch source content from contents table
-//   4. Truncate source to 5000 chars to prevent token overflow
-//   5. Call generateCopies → Promise.allSettled per platform
-//   6. Persist each successful copy to social_posts via atomic .rpc() versioning
-//   7. Return { copies, errors } — copies only contains DB-confirmed records
+// Returns a Server-Sent Events stream with per-platform text chunks.
+// Each platform streams independently in parallel via Promise.allSettled.
+//
+// SSE event types:
+//   chunk:    { type:"chunk", platform:"xiaohongshu", text:"..." }
+//   complete: { type:"complete", platform:"xiaohongshu", id, version, ... }
+//   error:    { type:"error", platform:"douyin", message:"..." }
+//   done:     { type:"done" }
 // ---------------------------------------------------------------------------
+
+interface ProviderConfig {
+  type: ProviderType;
+  apiKey: string;
+  model: string;
+  baseURL?: string;
+}
 
 interface GenerateRequestBody {
   contentId: string;
@@ -31,36 +44,13 @@ interface GenerateRequestBody {
   config: {
     platforms: Platform[];
     toneOverrides?: ToneOverrides;
-    provider: "openai" | "anthropic";
-    model?: string;
     temperature?: number;
     maxTokens?: number;
   };
-  apiKey: string;
+  providerConfig: ProviderConfig;
 }
 
-interface CopyResponse extends GenerationResult {
-  id: string;
-  version: number;
-}
-
-interface GenerateSuccessResponse {
-  success: true;
-  copies: CopyResponse[];
-  errors: GenerationError[];
-}
-
-interface GenerateErrorResponse {
-  success: false;
-  error: string;
-}
-
-type GenerateResponse = GenerateSuccessResponse | GenerateErrorResponse;
-
-export async function POST(
-  request: NextRequest
-): Promise<NextResponse<GenerateResponse>> {
-  // --- 1. Parse & validate input ---
+export async function POST(request: NextRequest) {
   let body: GenerateRequestBody;
   try {
     body = await request.json();
@@ -71,25 +61,11 @@ export async function POST(
     );
   }
 
-  const { contentId, config, apiKey } = body;
+  const { contentId, config, providerConfig } = body;
 
-  if (!contentId || typeof contentId !== "string") {
+  if (!contentId || !config?.platforms?.length || !providerConfig?.apiKey || !providerConfig?.model) {
     return NextResponse.json(
-      { success: false, error: "缺少 contentId 参数" },
-      { status: 400 }
-    );
-  }
-
-  if (!config?.platforms?.length) {
-    return NextResponse.json(
-      { success: false, error: "请至少选择一个目标平台" },
-      { status: 400 }
-    );
-  }
-
-  if (!apiKey || typeof apiKey !== "string") {
-    return NextResponse.json(
-      { success: false, error: "缺少 AI 服务 API Key" },
+      { success: false, error: "参数不完整" },
       { status: 400 }
     );
   }
@@ -97,20 +73,18 @@ export async function POST(
   const anonId = request.headers.get("x-anon-id");
   if (!anonId) {
     return NextResponse.json(
-      { success: false, error: "缺少用户身份标识 (x-anon-id)" },
+      { success: false, error: "缺少 x-anon-id" },
       { status: 401 }
     );
   }
 
-  // --- 2. Resolve identity & fetch source content ---
+  // Resolve identity & source text
   let sourceText: string;
   let profileId: string;
   let dbAvailable = false;
 
   try {
     const supabase = createServerClient();
-
-    // Upsert profile + return UUID in one round-trip
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .upsert({ anon_id: anonId }, { onConflict: "anon_id", ignoreDuplicates: true })
@@ -118,142 +92,145 @@ export async function POST(
       .single();
 
     if (profileError || !profile) {
-      return NextResponse.json(
-        { success: false, error: "用户身份验证失败" },
-        { status: 401 }
-      );
+      return NextResponse.json({ success: false, error: "身份验证失败" }, { status: 401 });
     }
     profileId = profile.id;
 
-    // Fetch source content from DB
     const { data: contentRow, error: contentError } = await supabase
       .from("contents")
       .select("raw_text, profile_id")
       .eq("id", contentId)
       .single();
 
-    if (contentError || !contentRow) {
-      return NextResponse.json(
-        { success: false, error: "素材内容不存在或无权访问" },
-        { status: 404 }
-      );
-    }
-
-    if (contentRow.profile_id !== profileId) {
-      return NextResponse.json(
-        { success: false, error: "无权访问该素材" },
-        { status: 403 }
-      );
+    if (contentError || !contentRow || contentRow.profile_id !== profileId) {
+      return NextResponse.json({ success: false, error: "素材不存在或无权访问" }, { status: 403 });
     }
 
     sourceText = contentRow.raw_text;
     dbAvailable = true;
   } catch {
-    // Supabase not configured — accept sourceText from request body
-    const fallbackText = body.sourceText;
-    if (!fallbackText) {
-      return NextResponse.json(
-        { success: false, error: "数据库未配置，请在请求中附带 sourceText 字段" },
-        { status: 503 }
-      );
+    if (!body.sourceText) {
+      return NextResponse.json({ success: false, error: "数据库不可用，需附带 sourceText" }, { status: 503 });
     }
-    sourceText = fallbackText;
+    sourceText = body.sourceText;
     profileId = anonId;
   }
 
-  // --- 3. Truncate source to prevent token overflow ---
   sourceText = truncateContent(sourceText);
 
-  // --- 4. Call generator (Promise.allSettled inside) ---
-  const generatorConfig: GeneratorConfig = {
-    platforms: config.platforms,
-    toneOverrides: config.toneOverrides ?? {},
-    provider: config.provider,
-    model: config.model,
-    temperature: config.temperature,
-    maxTokens: config.maxTokens,
-  };
+  // Build SSE stream
+  const encoder = new TextEncoder();
+  const send = (data: unknown) => encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
 
-  const batch = await generateCopies(sourceText, generatorConfig, apiKey);
+  const stream = new ReadableStream({
+    async start(controller) {
+      const platformPromises = config.platforms.map(async (platform) => {
+        try {
+          const platformConfig = PLATFORM_DEFAULTS[platform];
+          const tone = config.toneOverrides?.[platform] || platformConfig.defaultTone;
+          const userPrompt = buildUserPrompt(sourceText, platform, config.toneOverrides);
+          const temperature = config.temperature ?? getDefaultTemperature(platform);
+          const maxTokens = config.maxTokens ?? 2048;
 
-  // --- 5. Persist successful copies to social_posts ---
-  // INVARIANT: responseCopies ONLY contains records that were 100% confirmed
-  // written to the database. Any insert failure is moved to errors.
-  const responseCopies: CopyResponse[] = [];
-  const allErrors: GenerationError[] = [...batch.errors];
+          const model = createDynamicProvider({
+            provider: providerConfig.type,
+            apiKey: providerConfig.apiKey,
+            model: providerConfig.model,
+            baseURL: providerConfig.baseURL,
+          });
 
-  if (dbAvailable) {
-    const supabase = createServerClient();
+          const result = streamText({
+            model,
+            system: PLATFORM_SYSTEM_PROMPTS[platform],
+            prompt: userPrompt,
+            temperature,
+            maxOutputTokens: maxTokens,
+          });
 
-    for (const copy of batch.copies) {
-      // --- Bug B fix: atomic version via DB function ---
-      const { data: versionResult, error: rpcError } = await supabase.rpc(
-        "get_next_post_version",
-        { content_uuid: contentId, platform_name: copy.platform }
-      );
+          // Stream text chunks
+          for await (const textPart of result.textStream) {
+            controller.enqueue(send({ type: "chunk", platform, text: textPart }));
+          }
 
-      if (rpcError || typeof versionResult !== "number") {
-        allErrors.push({
-          platform: copy.platform,
-          message: `版本号获取失败: ${rpcError?.message ?? "unknown"}`,
-        });
-        continue;
-      }
+          // Get final metadata
+          const final = await result;
+          const fullText = await final.text;
+          const score = computeAlchemyScore(fullText, platformConfig);
 
-      const version = versionResult;
+          // Persist to DB
+          let postId = crypto.randomUUID();
+          let version = 0;
 
-      const { data: inserted, error: insertError } = await supabase
-        .from("social_posts")
-        .insert({
-          profile_id: profileId,
-          content_id: contentId,
-          platform: copy.platform,
-          body: copy.body,
-          tone: copy.tone,
-          model: copy.model,
-          version,
-          token_count: copy.tokenCount,
-          char_count: copy.charCount,
-          metadata: { alchemy_success_rate: copy.alchemySuccessRate },
-        })
-        .select("id")
-        .single();
+          if (dbAvailable) {
+            try {
+              const supabase = createServerClient();
 
-      // --- Bug A fix: on insert failure, move to errors — never return a fake ID ---
-      if (insertError || !inserted?.id) {
-        allErrors.push({
-          platform: copy.platform,
-          message: `数据库写入失败: ${insertError?.message ?? "unknown"}`,
-        });
-        continue;
-      }
+              const { data: versionResult } = await supabase.rpc(
+                "get_next_post_version",
+                { content_uuid: contentId, platform_name: platform }
+              );
 
-      // Only reach here on confirmed DB write
-      responseCopies.push({
-        ...copy,
-        id: inserted.id,
-        version,
+              if (typeof versionResult === "number") {
+                version = versionResult;
+                const { data: inserted } = await supabase
+                  .from("social_posts")
+                  .insert({
+                    profile_id: profileId,
+                    content_id: contentId,
+                    platform,
+                    body: fullText,
+                    tone,
+                    model: providerConfig.model,
+                    version,
+                    token_count: (await final.usage).totalTokens ?? 0,
+                    char_count: fullText.length,
+                    metadata: { alchemy_success_rate: score },
+                  })
+                  .select("id")
+                  .single();
+
+                if (inserted?.id) postId = inserted.id;
+              }
+            } catch {
+              // DB failed — still deliver the generated text
+            }
+          }
+
+          const completedResult: GenerationResult & { id: string; version: number } = {
+            id: postId,
+            version,
+            platform,
+            body: fullText,
+            tone,
+            model: providerConfig.model,
+            tokenCount: (await final.usage).totalTokens ?? 0,
+            charCount: fullText.length,
+            alchemySuccessRate: score,
+          };
+
+          controller.enqueue(send({ type: "complete", ...completedResult }));
+        } catch (err) {
+          controller.enqueue(
+            send({
+              type: "error",
+              platform,
+              message: err instanceof Error ? err.message : String(err),
+            })
+          );
+        }
       });
-    }
-  } else {
-    // Supabase not available — return generated results without persistence
-    // (no fake DB IDs — we mark version as 0 to indicate un-persisted)
-    for (const copy of batch.copies) {
-      responseCopies.push({
-        ...copy,
-        id: crypto.randomUUID(),
-        version: 0,
-      });
-    }
-  }
 
-  // --- 6. Return structured response ---
-  return NextResponse.json(
-    {
-      success: true,
-      copies: responseCopies,
-      errors: allErrors,
+      await Promise.allSettled(platformPromises);
+      controller.enqueue(send({ type: "done" }));
+      controller.close();
     },
-    { status: 201 }
-  );
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
 }

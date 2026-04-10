@@ -12,6 +12,9 @@ export type Platform = "xiaohongshu" | "wechat" | "douyin" | "weibo";
 /** Emoji density preference */
 export type EmojiLevel = "high" | "medium" | "low";
 
+/** Supported AI provider types */
+export type ProviderType = "openai" | "anthropic" | "google" | "custom";
+
 /** Session lifecycle states */
 export type SessionStatus = "draft" | "generating" | "completed" | "error";
 
@@ -105,10 +108,14 @@ export interface GeneratorConfig {
   /** Per-platform tone overrides; falls back to platform default if omitted */
   toneOverrides: ToneOverrides;
   /** Which LLM provider to use */
-  provider: "openai" | "anthropic";
-  /** Optional model override (e.g. "gpt-4o-mini", "claude-haiku-4-5-20251001") */
-  model?: string;
-  /** Temperature for generation (0.0 – 1.0). Per-platform overrides apply first */
+  provider: ProviderType;
+  /** Model identifier (e.g. "gpt-4o", "claude-sonnet-4-6", "deepseek-chat") */
+  model: string;
+  /** API key for the provider */
+  apiKey: string;
+  /** Custom base URL for OpenAI-compatible endpoints (DeepSeek, Groq, etc.) */
+  baseURL?: string;
+  /** Temperature for generation (0.0 – 1.0) */
   temperature?: number;
   /** Maximum tokens the LLM may return per platform call */
   maxTokens?: number;
@@ -221,6 +228,16 @@ export interface ApiKeyMap {
   anthropic?: string;
 }
 
+/** A saved provider configuration entry (stored in localStorage and Supabase) */
+export interface ProviderEntry {
+  id: string;
+  type: ProviderType;
+  name: string;
+  apiKey: string;
+  model: string;
+  baseURL?: string;
+}
+
 export interface UserPreference {
   id: string;
   userId: string;
@@ -271,7 +288,7 @@ export interface GenerateResponse {
 
 /** POST /api/validate-key request */
 export interface ValidateKeyRequest {
-  provider: "openai" | "anthropic";
+  provider: ProviderType;
   apiKey: string;
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -8,11 +8,12 @@ import {
   CheckCircle2,
   AlertCircle,
   RefreshCw,
+  Paperclip,
 } from "lucide-react";
 import { useIdentity } from "@/providers/identity-provider";
 import SocialPostCard from "@/components/SocialPostCard";
 import VaultGrid, { resultsToVaultItems } from "@/components/VaultGrid";
-import type { Platform, Content } from "@/types/index";
+import type { Platform, Content, ProviderEntry } from "@/types/index";
 
 // =============================================================================
 // Platform meta
@@ -20,7 +21,13 @@ import type { Platform, Content } from "@/types/index";
 
 const PLATFORM_META: Record<
   Platform,
-  { label: string; glyph: string; color: string; bgActive: string; ringActive: string }
+  {
+    label: string;
+    glyph: string;
+    color: string;
+    bgActive: string;
+    ringActive: string;
+  }
 > = {
   xiaohongshu: {
     label: "小红书",
@@ -53,7 +60,7 @@ const PLATFORM_META: Record<
 };
 
 // =============================================================================
-// Ritual progress steps — 1.5s each
+// Ritual progress
 // =============================================================================
 
 const INGEST_STEPS = [
@@ -61,6 +68,13 @@ const INGEST_STEPS = [
   "正在下载页面内容...",
   "正在提取精华...",
   "正在解析正文结构...",
+  "素材已入库",
+];
+
+const UPLOAD_STEPS = [
+  "正在上传文件...",
+  "正在解析文档内容...",
+  "正在提取文本...",
   "素材已入库",
 ];
 
@@ -84,14 +98,14 @@ function buildRitualSteps(platforms: Platform[]): string[] {
 }
 
 // =============================================================================
-// Spring config — Apple-style
+// Spring config
 // =============================================================================
 
 const SPRING_ENTER = { type: "spring" as const, stiffness: 260, damping: 22 };
 const SPRING_TAP = { type: "spring" as const, stiffness: 500, damping: 28 };
 
 // =============================================================================
-// Main component
+// Types
 // =============================================================================
 
 type Phase = "idle" | "ingesting" | "ingested" | "generating" | "done";
@@ -103,23 +117,40 @@ interface GeneratedCopy {
   alchemySuccessRate: number;
 }
 
+// =============================================================================
+// Main component
+// =============================================================================
+
 export default function AlchemyWorkbench() {
   const { anonId } = useIdentity();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [url, setUrl] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [progressMsg, setProgressMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [content, setContent] = useState<Content | null>(null);
-  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<Platform>>(new Set());
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<Platform>>(
+    new Set()
+  );
   const [copies, setCopies] = useState<GeneratedCopy[]>([]);
-  const [vaultItems, setVaultItems] = useState<ReturnType<typeof resultsToVaultItems>>([]);
+  const [streamingMap, setStreamingMap] = useState<Map<Platform, string>>(
+    new Map()
+  );
+  const [vaultItems, setVaultItems] = useState<
+    ReturnType<typeof resultsToVaultItems>
+  >([]);
 
   // --- Animated progress text ---
   useEffect(() => {
     if (phase !== "ingesting" && phase !== "generating") return;
 
-    const steps = phase === "ingesting" ? INGEST_STEPS : buildRitualSteps(Array.from(selectedPlatforms));
+    const steps =
+      phase === "ingesting"
+        ? progressMsg.startsWith("[文件]")
+          ? UPLOAD_STEPS
+          : INGEST_STEPS
+        : buildRitualSteps(Array.from(selectedPlatforms));
     setProgressMsg(steps[0]);
 
     let idx = 0;
@@ -133,9 +164,9 @@ export default function AlchemyWorkbench() {
     }, 1500);
 
     return () => clearInterval(timer);
-  }, [phase]);
+  }, [phase, selectedPlatforms]);
 
-  // --- Ingest ---
+  // --- Ingest URL ---
   const handleIngest = useCallback(async () => {
     if (!url.trim() || !anonId) return;
     setPhase("ingesting");
@@ -163,41 +194,166 @@ export default function AlchemyWorkbench() {
     }
   }, [url, anonId]);
 
-  // --- Generate ---
+  // --- Upload file ---
+  const handleFileUpload = useCallback(
+    async (file: File) => {
+      if (!anonId) return;
+      setPhase("ingesting");
+      setProgressMsg("[文件]");
+      setErrorMsg("");
+      setContent(null);
+      setCopies([]);
+
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          headers: { "x-anon-id": anonId },
+          body: formData,
+        });
+        const data = await res.json();
+        if (!data.success) {
+          setPhase("idle");
+          setErrorMsg(data.error);
+          return;
+        }
+        setContent(data.content);
+        setPhase("ingested");
+      } catch (err) {
+        setPhase("idle");
+        setErrorMsg((err as Error).message);
+      }
+    },
+    [anonId]
+  );
+
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFileUpload(file);
+    e.target.value = "";
+  };
+
+  // --- Generate (SSE streaming) ---
   const handleGenerate = useCallback(async () => {
     if (!content || !anonId || selectedPlatforms.size === 0) return;
+
+    // Read active provider
+    let providerConfig: {
+      type: string;
+      apiKey: string;
+      model: string;
+      baseURL?: string;
+    } | null = null;
+    try {
+      const raw = localStorage.getItem("sm_providers");
+      if (raw) {
+        const storage = JSON.parse(raw);
+        const active = (storage.providers as ProviderEntry[])?.find(
+          (p) => p.id === storage.activeId
+        );
+        if (active?.apiKey) {
+          providerConfig = {
+            type: active.type,
+            apiKey: active.apiKey,
+            model: active.model,
+            baseURL: active.baseURL,
+          };
+        }
+      }
+    } catch {
+      // fall through
+    }
+
+    if (!providerConfig) {
+      setErrorMsg("请先在「偏好设置」中配置 AI 服务商的 API Key");
+      return;
+    }
+
     setPhase("generating");
     setErrorMsg("");
+    setCopies([]);
+    setStreamingMap(new Map());
+
+    // Initialize streaming map
+    const initialMap = new Map<Platform, string>();
+    for (const p of Array.from(selectedPlatforms)) {
+      initialMap.set(p, "");
+    }
+    setStreamingMap(initialMap);
 
     try {
-      const res = await fetch("/api/generate", {
+      const response = await fetch("/api/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-anon-id": anonId },
+        headers: {
+          "Content-Type": "application/json",
+          "x-anon-id": anonId,
+        },
         body: JSON.stringify({
           contentId: content.id,
           sourceText: content.rawText,
-          config: { platforms: Array.from(selectedPlatforms), provider: "openai" },
-          apiKey: "placeholder",
+          config: { platforms: Array.from(selectedPlatforms) },
+          providerConfig,
         }),
       });
-      const data = await res.json();
 
-      if (data.errors?.length > 0 && data.copies?.length === 0) {
-        setErrorMsg(data.errors.map((e: { message: string }) => e.message).join("; "));
-        setPhase("ingested");
-        return;
+      if (!response.body) {
+        throw new Error("浏览器不支持流式响应");
       }
 
-      const mapped = data.copies.map((c: GeneratedCopy & { platform: Platform }) => ({
-        platform: c.platform,
-        body: c.body,
-        tone: c.tone,
-        alchemySuccessRate: c.alchemySuccessRate,
-      }));
-      setCopies(mapped);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      const completedResults: GeneratedCopy[] = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+
+            if (data.type === "chunk" && data.platform && data.text) {
+              setStreamingMap((prev) => {
+                const next = new Map(prev);
+                next.set(data.platform, (next.get(data.platform) || "") + data.text);
+                return next;
+              });
+            } else if (data.type === "complete") {
+              const completed: GeneratedCopy = {
+                platform: data.platform,
+                body: data.body,
+                tone: data.tone || "",
+                alchemySuccessRate: data.alchemySuccessRate || 0,
+              };
+              completedResults.push(completed);
+              setCopies([...completedResults]);
+            } else if (data.type === "error") {
+              setErrorMsg((prev) =>
+                prev ? `${prev}; ${data.message}` : data.message
+              );
+            }
+          } catch {
+            // Malformed SSE line — skip
+          }
+        }
+      }
 
       // Push to vault
-      setVaultItems(resultsToVaultItems(mapped, content?.title ?? undefined));
+      if (completedResults.length > 0) {
+        setVaultItems(
+          resultsToVaultItems(completedResults, content?.title ?? undefined)
+        );
+      }
+
+      setStreamingMap(new Map());
       setPhase("done");
     } catch (err) {
       setErrorMsg((err as Error).message);
@@ -211,20 +367,21 @@ export default function AlchemyWorkbench() {
     setUrl("");
     setContent(null);
     setCopies([]);
+    setStreamingMap(new Map());
     setSelectedPlatforms(new Set());
     setProgressMsg("");
     setErrorMsg("");
   };
 
   const canIngest = url.trim().length > 0 && phase === "idle";
-  const canGenerate = (phase === "ingested" || phase === "generating") && selectedPlatforms.size > 0;
+  const canGenerate =
+    (phase === "ingested" || phase === "generating") &&
+    selectedPlatforms.size > 0;
   const showWorkbench = phase === "ingested" || phase === "generating";
 
   return (
     <div className="flex flex-col items-center">
-      {/* ================================================================
-          Hero
-          ================================================================ */}
+      {/* Hero */}
       <motion.div
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
@@ -234,12 +391,12 @@ export default function AlchemyWorkbench() {
         <h1 className="text-[32px] md:text-[40px] font-bold tracking-tight text-gray-900">
           SocialMagic
         </h1>
-        <p className="mt-2 text-[15px] text-gray-400">投入素材，炼出黄金文案</p>
+        <p className="mt-2 text-[15px] text-gray-400">
+          投入素材，炼出黄金文案
+        </p>
       </motion.div>
 
-      {/* ================================================================
-          Spotlight input — Siri blue glow on focus
-          ================================================================ */}
+      {/* Spotlight input + file upload */}
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
@@ -262,11 +419,33 @@ export default function AlchemyWorkbench() {
             type="url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && canIngest && handleIngest()}
-            placeholder="粘贴文章或商品链接，开始炼金..."
+            onKeyDown={(e) =>
+              e.key === "Enter" && canIngest && handleIngest()
+            }
+            placeholder="粘贴文章/YouTube/Bilibili链接，开始炼金..."
             disabled={phase !== "idle"}
             className="flex-1 bg-transparent outline-none text-[15px] text-gray-800 placeholder:text-gray-300 disabled:opacity-40"
           />
+
+          {/* File upload button */}
+          {phase === "idle" && (
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-300 hover:text-[#0071E3] hover:bg-[#0071E3]/5 transition-colors duration-200"
+              aria-label="上传文件"
+              title="上传 PDF/Word 文件"
+            >
+              <Paperclip className="w-[18px] h-[18px]" />
+            </button>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.docx"
+            onChange={onFileChange}
+            className="hidden"
+          />
+
           {phase === "idle" && (
             <motion.button
               onClick={handleIngest}
@@ -283,27 +462,25 @@ export default function AlchemyWorkbench() {
         </div>
       </motion.div>
 
-      {/* ================================================================
-          Progress ritual — animated text
-          ================================================================ */}
+      {/* Progress ritual */}
       <AnimatePresence mode="wait">
-        {(phase === "ingesting" || phase === "generating") && progressMsg && (
-          <motion.div
-            key={progressMsg}
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            transition={{ ...SPRING_ENTER, duration: 0.4 }}
-            className="mt-4 flex items-center gap-2 text-[13px] text-[#0071E3]"
-          >
-            <span>{progressMsg}</span>
-          </motion.div>
-        )}
+        {(phase === "ingesting" || phase === "generating") &&
+          progressMsg &&
+          !progressMsg.startsWith("[") && (
+            <motion.div
+              key={progressMsg}
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ ...SPRING_ENTER, duration: 0.4 }}
+              className="mt-4 flex items-center gap-2 text-[13px] text-[#0071E3]"
+            >
+              <span>{progressMsg}</span>
+            </motion.div>
+          )}
       </AnimatePresence>
 
-      {/* ================================================================
-          Ingest success → Platform selector + Generate
-          ================================================================ */}
+      {/* Ingest success → Platform selector + Generate */}
       <AnimatePresence>
         {showWorkbench && content && (
           <motion.div
@@ -401,9 +578,7 @@ export default function AlchemyWorkbench() {
         )}
       </AnimatePresence>
 
-      {/* ================================================================
-          Error
-          ================================================================ */}
+      {/* Error */}
       <AnimatePresence>
         {errorMsg && (
           <motion.div
@@ -419,9 +594,54 @@ export default function AlchemyWorkbench() {
         )}
       </AnimatePresence>
 
-      {/* ================================================================
-          Results — SocialPostCards
-          ================================================================ */}
+      {/* Streaming cards — during generation */}
+      <AnimatePresence>
+        {phase === "generating" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="w-full max-w-[600px] mt-8 space-y-4"
+          >
+            <p className="text-[11px] text-gray-400 uppercase tracking-wider font-medium">
+              炼金进行中
+            </p>
+
+            {Array.from(selectedPlatforms).map((platform, i) => {
+              const completedCopy = copies.find(
+                (c) => c.platform === platform
+              );
+              const streamingText = streamingMap.get(platform) || "";
+
+              if (completedCopy) {
+                return (
+                  <SocialPostCard
+                    key={platform}
+                    platform={completedCopy.platform}
+                    body={completedCopy.body}
+                    tone={completedCopy.tone}
+                    alchemySuccessRate={completedCopy.alchemySuccessRate}
+                    index={i}
+                  />
+                );
+              }
+
+              return (
+                <SocialPostCard
+                  key={platform}
+                  platform={platform}
+                  body={streamingText}
+                  tone=""
+                  alchemySuccessRate={0}
+                  index={i}
+                  streaming={true}
+                />
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Final results */}
       <AnimatePresence>
         {phase === "done" && copies.length > 0 && (
           <motion.div
@@ -462,9 +682,11 @@ export default function AlchemyWorkbench() {
         )}
       </AnimatePresence>
 
-      {/* Vault — always visible when there are items */}
+      {/* Vault */}
       <div className="w-full max-w-[600px]">
-        <VaultGrid newItems={vaultItems.length > 0 ? vaultItems : undefined} />
+        <VaultGrid
+          newItems={vaultItems.length > 0 ? vaultItems : undefined}
+        />
       </div>
     </div>
   );
