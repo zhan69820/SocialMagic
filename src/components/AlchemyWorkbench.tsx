@@ -15,6 +15,7 @@ import {
 import { useIdentity } from "@/providers/identity-provider";
 import { useTheme } from "@/providers/theme-provider";
 import SocialPostCard from "@/components/SocialPostCard";
+import ResultCarousel from "@/components/ResultCarousel";
 import VaultGrid, { resultsToVaultItems } from "@/components/VaultGrid";
 import PlatformIcon from "@/components/PlatformIcon";
 import type { Platform, Content, ProviderEntry } from "@/types/index";
@@ -25,35 +26,51 @@ import type { Platform, Content, ProviderEntry } from "@/types/index";
 
 const PLATFORM_META: Record<
   Platform,
-  { label: string; color: string; bgActiveDark: string; bgActiveLight: string; ringActive: string }
+  {
+    label: string;
+    subtitle: string;
+    color: string;
+    gradientFrom: string;
+    gradientTo: string;
+    activeGlow: string;
+    badgeBg: string;
+  }
 > = {
   xiaohongshu: {
     label: "小红书",
+    subtitle: "种草笔记",
     color: "text-red-400",
-    bgActiveDark: "bg-red-500/10",
-    bgActiveLight: "bg-red-50",
-    ringActive: "ring-red-500/30",
+    gradientFrom: "from-red-500/25",
+    gradientTo: "to-pink-600/10",
+    activeGlow: "shadow-red-500/30",
+    badgeBg: "bg-red-500/15 text-red-400",
   },
   wechat: {
     label: "微信",
+    subtitle: "公众号文章",
     color: "text-green-400",
-    bgActiveDark: "bg-green-500/10",
-    bgActiveLight: "bg-green-50",
-    ringActive: "ring-green-500/30",
+    gradientFrom: "from-green-500/25",
+    gradientTo: "to-emerald-600/10",
+    activeGlow: "shadow-green-500/30",
+    badgeBg: "bg-green-500/15 text-green-400",
   },
   douyin: {
     label: "抖音",
+    subtitle: "爆款短视频",
     color: "text-cyan-400",
-    bgActiveDark: "bg-cyan-500/10",
-    bgActiveLight: "bg-cyan-50",
-    ringActive: "ring-cyan-500/30",
+    gradientFrom: "from-cyan-500/25",
+    gradientTo: "to-blue-600/10",
+    activeGlow: "shadow-cyan-500/30",
+    badgeBg: "bg-cyan-500/15 text-cyan-400",
   },
   weibo: {
     label: "微博",
+    subtitle: "热搜锐评",
     color: "text-orange-400",
-    bgActiveDark: "bg-orange-500/10",
-    bgActiveLight: "bg-orange-50",
-    ringActive: "ring-orange-500/30",
+    gradientFrom: "from-orange-500/25",
+    gradientTo: "to-amber-600/10",
+    activeGlow: "shadow-orange-500/30",
+    badgeBg: "bg-orange-500/15 text-orange-400",
   },
 };
 
@@ -421,12 +438,12 @@ export default function AlchemyWorkbench() {
               </span>
             </motion.div>
 
-            {/* Platform selector */}
+            {/* Platform selector — rich cards */}
             <div className="mb-8">
-              <p className="text-[11px] uppercase tracking-wider font-medium mb-4" style={{ color: "var(--text-quaternary)" }}>
+              <p className="text-[11px] uppercase tracking-wider font-medium mb-5" style={{ color: "var(--text-quaternary)" }}>
                 选择目标平台
               </p>
-              <div className="flex gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {(Object.keys(PLATFORM_META) as Platform[]).map((p, idx) => {
                   const meta = PLATFORM_META[p];
                   const selected = selectedPlatforms.has(p);
@@ -441,32 +458,49 @@ export default function AlchemyWorkbench() {
                         });
                       }}
                       whileTap={{ scale: 0.93 }}
-                      whileHover={{ scale: 1.03 }}
-                      animate={{ scale: selected ? 1.06 : 1 }}
-                      transition={SPRING_TAP}
+                      whileHover={{ y: -3 }}
+                      animate={{
+                        scale: selected ? 1.03 : 1,
+                        boxShadow: selected
+                          ? `0 8px 30px rgba(0,0,0,0.2), 0 0 20px rgba(139,92,246,0.15)`
+                          : "0 2px 12px rgba(0,0,0,0.1)",
+                      }}
+                      transition={{ ...SPRING_TAP, delay: idx * 0.03 }}
                       className={`
-                        flex flex-col items-center gap-2 px-6 py-4 rounded-2xl
-                        border backdrop-blur-xl transition-all duration-300
+                        relative flex flex-col items-center gap-2.5 px-4 py-5 rounded-2xl
+                        border backdrop-blur-xl transition-colors duration-300 overflow-hidden
                         ${selected
-                          ? isDark
-                            ? `${meta.bgActiveDark} ${meta.ringActive} ring-1 animate-glow-pulse`
-                            : `${meta.bgActiveLight} ${meta.ringActive} ring-1 shadow-sm`
-                          : isDark
-                            ? "border-white/[0.08] hover:border-white/[0.14]"
-                            : "border-black/[0.06] hover:border-black/[0.12]"
+                          ? `bg-gradient-to-br ${meta.gradientFrom} ${meta.gradientTo} border-violet-500/20`
+                          : ""
                         }
                       `}
-                      style={!selected ? { background: "var(--bg-card)" } : undefined}
+                      style={!selected ? { background: "var(--bg-card)", borderColor: "var(--bg-card-border)" } : undefined}
                     >
-                      <motion.span
-                        className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors duration-200 ${selected ? meta.color : "text-gray-500"}`}
+                      {/* Selected check mark */}
+                      {selected && (
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          className="absolute top-2 right-2 w-5 h-5 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center"
+                        >
+                          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M2 6l3 3 5-5" />
+                          </svg>
+                        </motion.div>
+                      )}
+
+                      <motion.div
+                        className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 ${selected ? meta.badgeBg : "bg-white/[0.04]"}`}
                         animate={selected ? { rotate: [0, -5, 5, 0] } : {}}
-                        transition={{ duration: 0.4, delay: idx * 0.05 }}
+                        transition={{ duration: 0.4 }}
                       >
-                        <PlatformIcon platform={p} size={28} />
-                      </motion.span>
-                      <span className={`text-[12px] font-medium transition-colors duration-200 ${selected ? (isDark ? "text-white/90" : "text-gray-800") : "text-gray-500"}`}>
+                        <PlatformIcon platform={p} size={26} />
+                      </motion.div>
+                      <span className={`text-[13px] font-semibold transition-colors duration-200 ${selected ? (isDark ? "text-white/90" : "text-gray-800") : "text-gray-500"}`}>
                         {meta.label}
+                      </span>
+                      <span className="text-[10px] transition-colors duration-200" style={{ color: "var(--text-quaternary)" }}>
+                        {meta.subtitle}
                       </span>
                     </motion.button>
                   );
@@ -514,62 +548,39 @@ export default function AlchemyWorkbench() {
         )}
       </AnimatePresence>
 
-      {/* Streaming cards — wider grid */}
+      {/* Streaming / Results carousel */}
       <AnimatePresence>
         {phase === "generating" && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className={`w-full max-w-[720px] mt-8 space-y-4 ${blurClass} ${blurTransition}`}
+            className={`w-full max-w-[720px] mt-8 ${blurClass} ${blurTransition}`}
           >
-            <p className="text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--text-quaternary)" }}>
-              炼金进行中
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {Array.from(selectedPlatforms).map((platform, i) => {
-                const completedCopy = copies.find((c) => c.platform === platform);
-                const streamingText = streamingMap.get(platform) || "";
-                if (completedCopy) {
-                  return (
-                    <SocialPostCard key={platform} platform={completedCopy.platform} body={completedCopy.body} tone={completedCopy.tone} alchemySuccessRate={completedCopy.alchemySuccessRate} index={i} />
-                  );
-                }
-                return (
-                  <SocialPostCard key={platform} platform={platform} body={streamingText} tone="" alchemySuccessRate={0} index={i} streaming={true} />
-                );
-              })}
-            </div>
+            <ResultCarousel
+              items={Array.from(selectedPlatforms).map((p) => ({
+                platform: p,
+                body: copies.find((c) => c.platform === p)?.body || "",
+                tone: copies.find((c) => c.platform === p)?.tone || "",
+                alchemySuccessRate: copies.find((c) => c.platform === p)?.alchemySuccessRate || 0,
+              }))}
+              streamingMap={streamingMap}
+              isStreaming={true}
+            />
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Final results — wider grid */}
       <AnimatePresence>
         {phase === "done" && copies.length > 0 && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full max-w-[720px] mt-8 space-y-4">
-            <p className="text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--text-quaternary)" }}>
-              炼金结果
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {copies.map((copy, i) => (
-                <SocialPostCard key={copy.platform} platform={copy.platform} body={copy.body} tone={copy.tone} alchemySuccessRate={copy.alchemySuccessRate} index={i} />
-              ))}
-            </div>
-            {/* Reset */}
-            <motion.button
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: copies.length * 0.08 + 0.15 }}
-              onClick={reset}
-              whileTap={{ scale: 0.97 }}
-              className="w-full py-3 rounded-2xl border transition-all duration-200 glass-card"
-              style={{ color: "var(--text-tertiary)" }}
-            >
-              <span className="flex items-center justify-center gap-2">
-                <RefreshCw className="w-4 h-4" />
-                开始新的炼金
-              </span>
-            </motion.button>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="w-full max-w-[720px] mt-8"
+          >
+            <ResultCarousel
+              items={copies}
+              onReset={reset}
+            />
           </motion.div>
         )}
       </AnimatePresence>
