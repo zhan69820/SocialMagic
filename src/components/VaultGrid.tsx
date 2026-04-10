@@ -47,7 +47,7 @@ export interface VaultGridProps {
 
 export default function VaultGrid({ newItems }: VaultGridProps) {
   const [items, setItems] = useState<VaultItem[]>([]);
-  const { ready } = useIdentity();
+  const { anonId, ready } = useIdentity();
 
   // Load vault on mount
   useEffect(() => {
@@ -72,7 +72,27 @@ export default function VaultGrid({ newItems }: VaultGridProps) {
     });
   }, [newItems]);
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
+    // Step 1: Attempt backend delete (if user is identified)
+    if (anonId) {
+      try {
+        const res = await fetch(`/api/posts/${id}`, {
+          method: "DELETE",
+          headers: { "x-anon-id": anonId },
+        });
+        const data = await res.json();
+
+        if (!data.success) {
+          // Backend rejected — don't remove locally either
+          console.error("Delete rejected:", data.error);
+          return;
+        }
+      } catch {
+        // Network error — allow offline local delete as graceful fallback
+      }
+    }
+
+    // Step 2: Sync local state + localStorage
     setItems((prev) => {
       const updated = prev.filter((i) => i.id !== id);
       saveVault(updated);

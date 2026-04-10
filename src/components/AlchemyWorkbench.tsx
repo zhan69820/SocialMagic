@@ -64,12 +64,24 @@ const INGEST_STEPS = [
   "素材已入库",
 ];
 
-const RITUAL_STEPS = [
-  "正在解析结界内容...",
-  "正在调配文案配方...",
-  "文案正在凝固...",
-  "最后润色中...",
-];
+const PLATFORM_RITUAL_LABELS: Record<Platform, string> = {
+  xiaohongshu: "小红书金句",
+  wechat: "微信随笔",
+  douyin: "抖音爆款",
+  weibo: "微博锐评",
+};
+
+function buildRitualSteps(platforms: Platform[]): string[] {
+  const platformParts = platforms.map((p) => PLATFORM_RITUAL_LABELS[p]);
+  return [
+    "正在解析结界内容...",
+    `正在调配${platformParts[0]}配方...`,
+    platformParts.length > 1
+      ? `${platformParts.slice(0, -1).join("、")}正在凝固...`
+      : "文案正在凝固...",
+    "最后润色中...",
+  ];
+}
 
 // =============================================================================
 // Spring config — Apple-style
@@ -107,7 +119,7 @@ export default function AlchemyWorkbench() {
   useEffect(() => {
     if (phase !== "ingesting" && phase !== "generating") return;
 
-    const steps = phase === "ingesting" ? INGEST_STEPS : RITUAL_STEPS;
+    const steps = phase === "ingesting" ? INGEST_STEPS : buildRitualSteps(Array.from(selectedPlatforms));
     setProgressMsg(steps[0]);
 
     let idx = 0;

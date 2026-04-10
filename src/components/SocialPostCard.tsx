@@ -76,7 +76,15 @@ export default function SocialPostCard({
   };
 
   const inner = (
-    <div className="group rounded-2xl bg-white backdrop-blur-xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_32px_rgba(0,0,0,0.08)] transition-shadow duration-300 overflow-hidden">
+    <div className="group relative rounded-2xl bg-white backdrop-blur-xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_32px_rgba(0,0,0,0.08)] transition-shadow duration-300 overflow-hidden">
+      {/* Liquid glass refraction edge — visible on hover */}
+      <div className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" style={{
+        background: "linear-gradient(135deg, rgba(255,255,255,0.4) 0%, transparent 40%, transparent 60%, rgba(255,255,255,0.15) 100%)",
+        borderImage: "linear-gradient(135deg, rgba(255,255,255,0.8), rgba(0,113,227,0.15), rgba(255,255,255,0.4)) 1",
+      }} />
+      <div className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" style={{
+        boxShadow: "inset 0 1px 1px rgba(255,255,255,0.9), inset 0 -1px 1px rgba(255,255,255,0.3), 0 0 16px rgba(0,113,227,0.06)",
+      }} />
       {/* Header */}
       <div className="flex items-center justify-between px-5 pt-4 pb-2">
         <div className="flex items-center gap-2.5">
