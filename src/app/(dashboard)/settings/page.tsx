@@ -213,11 +213,11 @@ export default function SettingsPage() {
           damping: 22,
           delay: 0.05,
         }}
-        className="rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.08] shadow-[0_2px_20px_rgba(0,0,0,0.3)] overflow-hidden"
+        className="rounded-2xl backdrop-blur-xl border overflow-hidden glass-card"
       >
-        <div className="flex items-center gap-3 px-6 py-4 border-b border-white/[0.06]">
-          <Shield className="w-4 h-4 text-gray-500" />
-          <h2 className="text-[14px] font-semibold text-white/90">
+        <div className="flex items-center gap-3 px-6 py-4 border-b" style={{ borderColor: "var(--bg-card-border)" }}>
+          <Shield className="w-4 h-4 text-violet-400" />
+          <h2 className="text-[14px] font-semibold" style={{ color: "var(--text-primary)" }}>
             AI 服务商配置
           </h2>
         </div>
@@ -237,7 +237,7 @@ export default function SettingsPage() {
                   ${
                     isActive
                       ? "border-violet-500/30 bg-violet-500/[0.06] ring-1 ring-violet-500/10"
-                      : "border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04]"
+                      : "hover:bg-white/[0.04]"
                   }
                 `}
               >
@@ -248,7 +248,7 @@ export default function SettingsPage() {
                     onClick={() => setActiveId(provider.id)}
                     className={`
                       w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors duration-200
-                      ${isActive ? "border-violet-400" : "border-gray-700 hover:border-gray-500"}
+                      ${isActive ? "border-violet-400" : "border-gray-400 hover:border-gray-500"}
                     `}
                     aria-label={`设为默认: ${provider.name || "自定义服务商"}`}
                   >
@@ -262,7 +262,7 @@ export default function SettingsPage() {
                     className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
                       isActive
                         ? "bg-violet-500/20 text-violet-400"
-                        : "bg-white/[0.06] text-gray-600"
+                        : "bg-gray-100 text-gray-500"
                     }`}
                   >
                     {glyph}
@@ -277,10 +277,11 @@ export default function SettingsPage() {
                         updateProvider(provider.id, "name", e.target.value)
                       }
                       placeholder="服务商名称"
-                      className="flex-1 bg-transparent outline-none text-[13px] font-medium text-white/90 placeholder:text-gray-700 min-w-0"
+                      className="flex-1 bg-transparent outline-none text-[13px] font-medium placeholder:text-gray-400 min-w-0"
+                      style={{ color: "var(--text-primary)" }}
                     />
                   ) : (
-                    <span className="flex-1 text-[13px] font-medium text-white/90 truncate">
+                    <span className="flex-1 text-[13px] font-medium truncate" style={{ color: "var(--text-primary)" }}>
                       {provider.name}
                     </span>
                   )}
@@ -294,7 +295,7 @@ export default function SettingsPage() {
                   {isCustom && (
                     <button
                       onClick={() => removeProvider(provider.id)}
-                      className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-700 hover:text-red-400 hover:bg-red-500/10 transition-colors duration-200 shrink-0"
+                      className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors duration-200 shrink-0"
                       aria-label="删除"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -316,7 +317,8 @@ export default function SettingsPage() {
                           updateProvider(provider.id, "baseURL", e.target.value)
                         }
                         placeholder="https://api.deepseek.com/v1"
-                        className="flex-1 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-[13px] text-white/90 placeholder:text-gray-700 outline-none focus:border-violet-500/40 transition-colors duration-200 min-w-0"
+                        className="flex-1 px-3 py-2 rounded-lg border text-[13px] placeholder:text-gray-400 outline-none focus:border-violet-500/40 transition-colors duration-200 min-w-0"
+                        style={{ background: "var(--bg-field)", borderColor: "var(--bg-field-border)", color: "var(--text-primary)" }}
                       />
                     </div>
                   )}
@@ -344,7 +346,8 @@ export default function SettingsPage() {
                     />
                     <button
                       onClick={() => toggleKeyVisible(provider.id)}
-                      className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/[0.04] border border-white/[0.08] text-gray-600 hover:text-gray-400 transition-colors duration-200 shrink-0"
+                      className="w-8 h-8 flex items-center justify-center rounded-lg border text-gray-500 hover:text-gray-400 transition-colors duration-200 shrink-0"
+                      style={{ background: "var(--bg-field)", borderColor: "var(--bg-field-border)" }}
                       aria-label={isVisible ? "隐藏密钥" : "显示密钥"}
                     >
                       {isVisible ? (
@@ -377,14 +380,15 @@ export default function SettingsPage() {
           {/* Add custom provider */}
           <button
             onClick={addCustom}
-            className="w-full py-3 rounded-xl border border-dashed border-white/[0.1] text-[13px] text-gray-600 hover:text-violet-400 hover:border-violet-500/30 hover:bg-violet-500/[0.04] transition-all duration-200 flex items-center justify-center gap-2"
+            className="w-full py-3 rounded-xl border border-dashed text-[13px] text-gray-500 hover:text-violet-400 hover:border-violet-500/30 hover:bg-violet-500/[0.04] transition-all duration-200 flex items-center justify-center gap-2"
+            style={{ borderColor: "var(--bg-card-border)" }}
           >
             <Plus className="w-4 h-4" />
             添加自定义服务商
           </button>
 
           {/* Privacy note */}
-          <p className="text-[11px] text-gray-700 leading-relaxed pt-2">
+          <p className="text-[11px] leading-relaxed pt-2" style={{ color: "var(--text-tertiary)" }}>
             密钥保存在浏览器本地存储中，并同步至云端备份。
             每次生成文案时，密钥通过加密连接直接发送至对应的 AI 服务商。
           </p>
@@ -401,7 +405,7 @@ export default function SettingsPage() {
                   ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                   : hasChanges()
                     ? "bg-gradient-to-r from-violet-600 to-cyan-500 text-white shadow-[0_4px_20px_rgba(139,92,246,0.3)] hover:shadow-[0_8px_30px_rgba(139,92,246,0.4)]"
-                    : "bg-white/[0.04] text-gray-700 cursor-not-allowed border border-white/[0.06]"
+                    : "cursor-not-allowed border"
               }
             `}
           >

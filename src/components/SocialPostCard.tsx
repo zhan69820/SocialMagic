@@ -7,43 +7,20 @@ import type { Platform } from "@/types/index";
 import PlatformIcon from "@/components/PlatformIcon";
 import { useTypewriter } from "@/hooks/useTypewriter";
 import { useHapticCopy } from "@/hooks/useHapticCopy";
+import { useTheme } from "@/providers/theme-provider";
 
 // =============================================================================
-// Platform visual config — dark theme
+// Platform visual config
 // =============================================================================
 
 const PLATFORM_VISUAL: Record<
   Platform,
-  { label: string; accent: string; ring: string; bg: string; glow: string }
+  { label: string; accent: string; ring: string; bg: string }
 > = {
-  xiaohongshu: {
-    label: "小红书",
-    accent: "text-red-400",
-    ring: "ring-red-500/30",
-    bg: "bg-red-500/10",
-    glow: "shadow-red-500/20",
-  },
-  wechat: {
-    label: "微信",
-    accent: "text-green-400",
-    ring: "ring-green-500/30",
-    bg: "bg-green-500/10",
-    glow: "shadow-green-500/20",
-  },
-  douyin: {
-    label: "抖音",
-    accent: "text-cyan-400",
-    ring: "ring-cyan-500/30",
-    bg: "bg-cyan-500/10",
-    glow: "shadow-cyan-500/20",
-  },
-  weibo: {
-    label: "微博",
-    accent: "text-orange-400",
-    ring: "ring-orange-500/30",
-    bg: "bg-orange-500/10",
-    glow: "shadow-orange-500/20",
-  },
+  xiaohongshu: { label: "小红书", accent: "text-red-400", ring: "ring-red-500/30", bg: "bg-red-500/10" },
+  wechat: { label: "微信", accent: "text-green-400", ring: "ring-green-500/30", bg: "bg-green-500/10" },
+  douyin: { label: "抖音", accent: "text-cyan-400", ring: "ring-cyan-500/30", bg: "bg-cyan-500/10" },
+  weibo: { label: "微博", accent: "text-orange-400", ring: "ring-orange-500/30", bg: "bg-orange-500/10" },
 };
 
 // =============================================================================
@@ -79,7 +56,7 @@ function AnimatedScore({ value, streaming }: { value: number; streaming?: boolea
   }, [spring, display, value, streaming]);
 
   if (streaming) {
-    return <span className="tabular-nums font-semibold text-[13px] text-gray-600">...</span>;
+    return <span className="tabular-nums font-semibold text-[13px] text-gray-500">...</span>;
   }
 
   return (
@@ -104,7 +81,7 @@ export interface SocialPostCardProps {
 }
 
 // =============================================================================
-// SocialPostCard — Dark Glass Edition
+// SocialPostCard — Dual-Theme Glass Card
 // =============================================================================
 
 export default function SocialPostCard({
@@ -119,6 +96,8 @@ export default function SocialPostCard({
   const [copied, setCopied] = useState(false);
   const visual = PLATFORM_VISUAL[platform];
   const copyWithHaptic = useHapticCopy();
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
 
   const { displayed, cursorVisible, isTyping, skipToEnd } = useTypewriter(
     streaming ? body : "",
@@ -140,14 +119,7 @@ export default function SocialPostCard({
   const displayBody = streaming ? displayed : body;
 
   const inner = (
-    <div className={`
-      group relative rounded-2xl backdrop-blur-xl
-      border transition-all duration-500 overflow-hidden
-      bg-white/[0.03] border-white/[0.08]
-      hover:bg-white/[0.06] hover:border-white/[0.14]
-      shadow-[0_2px_20px_rgba(0,0,0,0.3)]
-      hover:shadow-[0_8px_40px_rgba(0,0,0,0.4),0_0_30px_rgba(139,92,246,0.06)]
-    `}>
+    <div className="group relative rounded-2xl backdrop-blur-xl border transition-all duration-300 overflow-hidden glass-card">
       {/* Inner glow refraction */}
       <div className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" style={{
         background: "linear-gradient(135deg, rgba(139,92,246,0.06) 0%, transparent 40%, transparent 60%, rgba(6,182,212,0.04) 100%)",
@@ -160,8 +132,8 @@ export default function SocialPostCard({
             <PlatformIcon platform={platform} size={16} />
           </span>
           <div>
-            <span className="text-[13px] font-medium text-white/90 leading-tight">{visual.label}</span>
-            <span className="block text-[11px] text-gray-600 leading-tight">
+            <span className="text-[13px] font-medium leading-tight" style={{ color: "var(--text-primary)" }}>{visual.label}</span>
+            <span className="block text-[11px] leading-tight" style={{ color: "var(--text-tertiary)" }}>
               {streaming ? "生成中..." : tone}
             </span>
           </div>
@@ -169,7 +141,7 @@ export default function SocialPostCard({
 
         {/* Score gauge */}
         <div className="flex items-center gap-1.5 relative">
-          <svg width="28" height="28" viewBox="0 0 28 28" className="text-white/[0.06]">
+          <svg width="28" height="28" viewBox="0 0 28 28" style={{ color: "var(--bg-card-border)" }}>
             <circle cx="14" cy="14" r="11" fill="none" stroke="currentColor" strokeWidth="2.5" />
           </svg>
           {!streaming && (
@@ -183,7 +155,7 @@ export default function SocialPostCard({
 
       {/* Body */}
       <div className="px-5 pb-4" onClick={handleBodyClick}>
-        <div className="text-[14px] text-gray-300 whitespace-pre-wrap leading-[1.8] max-h-56 overflow-y-auto pr-1">
+        <div className="text-[14px] whitespace-pre-wrap leading-[1.8] max-h-56 overflow-y-auto pr-1" style={{ color: isDark ? "#d1d5db" : "#4b5563" }}>
           {displayBody}
           {streaming && cursorVisible && (
             <span className="inline-block w-[2px] h-[14px] bg-violet-400 ml-0.5 animate-pulse align-text-bottom" />
@@ -193,8 +165,8 @@ export default function SocialPostCard({
 
       {/* Footer */}
       {!streaming && (
-        <div className="flex items-center justify-between px-5 py-2.5 border-t border-white/[0.06]">
-          <span className="text-[11px] text-gray-600">{body.length} 字</span>
+        <div className="flex items-center justify-between px-5 py-2.5" style={{ borderTop: "1px solid var(--bg-card-border)" }}>
+          <span className="text-[11px]" style={{ color: "var(--text-quaternary)" }}>{body.length} 字</span>
           <motion.button
             onClick={handleCopy}
             whileTap={{ scale: 0.92 }}
@@ -202,7 +174,9 @@ export default function SocialPostCard({
               flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors duration-200
               ${copied
                 ? "bg-emerald-500/20 text-emerald-400"
-                : "bg-white/[0.04] text-gray-500 hover:bg-white/[0.08] hover:text-gray-300"
+                : isDark
+                  ? "bg-white/[0.04] text-gray-500 hover:bg-white/[0.08] hover:text-gray-300"
+                  : "bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700"
               }
             `}
           >
@@ -225,7 +199,7 @@ export default function SocialPostCard({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95, y: 20 }}
       transition={{
-        delay: index * 0.1,
+        delay: index * 0.08,
         type: "spring",
         stiffness: 200,
         damping: 18,

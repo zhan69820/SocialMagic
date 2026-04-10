@@ -124,7 +124,8 @@ export default function VaultGrid({ newItems }: VaultGridProps) {
                   />
                   <button
                     onClick={() => handleDelete(item.id)}
-                    className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-lg bg-black/40 backdrop-blur text-gray-700 hover:text-red-400 hover:bg-red-500/10 transition opacity-0 group-hover/card:opacity-100"
+                    className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-lg backdrop-blur hover:text-red-400 hover:bg-red-500/10 transition opacity-0 group-hover/card:opacity-100"
+                    style={{ background: "var(--bg-delete)", color: "var(--text-quaternary)" }}
                     aria-label="删除"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -150,7 +151,8 @@ export default function VaultGrid({ newItems }: VaultGridProps) {
                   />
                   <button
                     onClick={() => handleDelete(item.id)}
-                    className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-lg bg-black/40 backdrop-blur text-gray-700 hover:text-red-400 hover:bg-red-500/10 transition opacity-0 group-hover/card:opacity-100"
+                    className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-lg backdrop-blur hover:text-red-400 hover:bg-red-500/10 transition opacity-0 group-hover/card:opacity-100"
+                    style={{ background: "var(--bg-delete)", color: "var(--text-quaternary)" }}
                     aria-label="删除"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
