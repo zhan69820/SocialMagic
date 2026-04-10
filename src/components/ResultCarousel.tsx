@@ -8,73 +8,8 @@ import PlatformIcon from "@/components/PlatformIcon";
 import { useTypewriter } from "@/hooks/useTypewriter";
 import { useHapticCopy } from "@/hooks/useHapticCopy";
 import { useTheme } from "@/providers/theme-provider";
-
-// =============================================================================
-// Platform visual config — rich gradients
-// =============================================================================
-
-const PLATFORM_THEME: Record<
-  Platform,
-  {
-    label: string;
-    accent: string;
-    gradientFrom: string;
-    gradientTo: string;
-    glow: string;
-    badgeBg: string;
-  }
-> = {
-  xiaohongshu: {
-    label: "小红书",
-    accent: "text-red-400",
-    gradientFrom: "from-red-500/20",
-    gradientTo: "to-pink-500/10",
-    glow: "shadow-red-500/20",
-    badgeBg: "bg-red-500/15 text-red-400",
-  },
-  wechat: {
-    label: "微信",
-    accent: "text-green-400",
-    gradientFrom: "from-green-500/20",
-    gradientTo: "to-emerald-500/10",
-    glow: "shadow-green-500/20",
-    badgeBg: "bg-green-500/15 text-green-400",
-  },
-  douyin: {
-    label: "抖音",
-    accent: "text-cyan-400",
-    gradientFrom: "from-cyan-500/20",
-    gradientTo: "to-blue-500/10",
-    glow: "shadow-cyan-500/20",
-    badgeBg: "bg-cyan-500/15 text-cyan-400",
-  },
-  weibo: {
-    label: "微博",
-    accent: "text-orange-400",
-    gradientFrom: "from-orange-500/20",
-    gradientTo: "to-amber-500/10",
-    glow: "shadow-orange-500/20",
-    badgeBg: "bg-orange-500/15 text-orange-400",
-  },
-};
-
-// =============================================================================
-// Score color
-// =============================================================================
-
-function getScoreColor(score: number): string {
-  if (score >= 90) return "text-amber-400";
-  if (score >= 75) return "text-violet-400";
-  if (score >= 60) return "text-gray-400";
-  return "text-gray-600";
-}
-
-function getScoreLabel(score: number): string {
-  if (score >= 90) return "传奇品质";
-  if (score >= 75) return "优质文案";
-  if (score >= 60) return "合格出品";
-  return "初稿";
-}
+import { PLATFORM_THEME } from "@/lib/constants/platform-theme";
+import { getScoreColor, getScoreLabel } from "@/lib/utils/score-helpers";
 
 // =============================================================================
 // Animated counter

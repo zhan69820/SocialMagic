@@ -1,4 +1,3 @@
-import { generateText, streamText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
@@ -192,15 +191,6 @@ export interface GenerationResult {
   alchemySuccessRate: number;
 }
 
-export interface GenerationError {
-  platform: Platform;
-  message: string;
-}
-
-export interface GenerationBatchResult {
-  copies: GenerationResult[];
-  errors: GenerationError[];
-}
 
 // =============================================================================
 // Prompt builder — shared between batch and streaming
@@ -332,81 +322,4 @@ export function truncateContent(
   }
 
   return truncated.trimEnd() + "\n\n...(素材已截断)";
-}
-
-// =============================================================================
-// Batch Generator — backward compatible
-// =============================================================================
-
-export async function generateCopies(
-  sourceMarkdown: string,
-  config: GeneratorConfig
-): Promise<GenerationBatchResult> {
-  const safeSource = truncateContent(sourceMarkdown);
-
-  const settled = await Promise.allSettled(
-    config.platforms.map((platform) =>
-      generateForPlatform(safeSource, platform, config)
-    )
-  );
-
-  const copies: GenerationResult[] = [];
-  const errors: GenerationError[] = [];
-
-  for (let i = 0; i < settled.length; i++) {
-    const result = settled[i];
-    const platform = config.platforms[i];
-
-    if (result.status === "fulfilled") {
-      copies.push(result.value);
-    } else {
-      errors.push({
-        platform,
-        message:
-          result.reason instanceof Error
-            ? result.reason.message
-            : String(result.reason),
-      });
-    }
-  }
-
-  return { copies, errors };
-}
-
-async function generateForPlatform(
-  sourceMarkdown: string,
-  platform: Platform,
-  config: GeneratorConfig
-): Promise<GenerationResult> {
-  const platformConfig = PLATFORM_DEFAULTS[platform];
-  const tone = config.toneOverrides[platform] || platformConfig.defaultTone;
-  const userPrompt = buildUserPrompt(sourceMarkdown, platform, config.toneOverrides);
-  const temperature = config.temperature ?? getDefaultTemperature(platform);
-  const maxTokens = config.maxTokens ?? 2048;
-
-  const model = createDynamicProvider({
-    provider: config.provider,
-    apiKey: config.apiKey,
-    model: config.model,
-    baseURL: config.baseURL,
-  });
-
-  const result = await generateText({
-    model,
-    system: PLATFORM_SYSTEM_PROMPTS[platform],
-    prompt: userPrompt,
-    temperature,
-    maxOutputTokens: maxTokens,
-  });
-
-  const body = result.text;
-  return {
-    platform,
-    body,
-    tone,
-    model: config.model,
-    tokenCount: result.usage.totalTokens ?? 0,
-    charCount: body.length,
-    alchemySuccessRate: computeAlchemyScore(body, platformConfig),
-  };
 }

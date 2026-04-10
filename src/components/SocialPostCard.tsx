@@ -8,37 +8,8 @@ import PlatformIcon from "@/components/PlatformIcon";
 import { useTypewriter } from "@/hooks/useTypewriter";
 import { useHapticCopy } from "@/hooks/useHapticCopy";
 import { useTheme } from "@/providers/theme-provider";
-
-// =============================================================================
-// Platform visual config
-// =============================================================================
-
-const PLATFORM_VISUAL: Record<
-  Platform,
-  { label: string; accent: string; ring: string; bg: string }
-> = {
-  xiaohongshu: { label: "小红书", accent: "text-red-400", ring: "ring-red-500/30", bg: "bg-red-500/10" },
-  wechat: { label: "微信", accent: "text-green-400", ring: "ring-green-500/30", bg: "bg-green-500/10" },
-  douyin: { label: "抖音", accent: "text-cyan-400", ring: "ring-cyan-500/30", bg: "bg-cyan-500/10" },
-  weibo: { label: "微博", accent: "text-orange-400", ring: "ring-orange-500/30", bg: "bg-orange-500/10" },
-};
-
-// =============================================================================
-// Score color
-// =============================================================================
-
-function getScoreColor(score: number): string {
-  if (score >= 90) return "text-amber-400";
-  if (score >= 75) return "text-violet-400";
-  if (score >= 60) return "text-gray-400";
-  return "text-gray-600";
-}
-
-function getScoreGlow(score: number): string {
-  if (score >= 90) return "drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]";
-  if (score >= 75) return "drop-shadow-[0_0_6px_rgba(139,92,246,0.4)]";
-  return "";
-}
+import { PLATFORM_THEME } from "@/lib/constants/platform-theme";
+import { getScoreColor, getScoreGlow } from "@/lib/utils/score-helpers";
 
 // =============================================================================
 // Animated counter
@@ -94,7 +65,7 @@ export default function SocialPostCard({
   streaming = false,
 }: SocialPostCardProps) {
   const [copied, setCopied] = useState(false);
-  const visual = PLATFORM_VISUAL[platform];
+  const visual = PLATFORM_THEME[platform];
   const copyWithHaptic = useHapticCopy();
   const { theme } = useTheme();
   const isDark = theme === "dark";

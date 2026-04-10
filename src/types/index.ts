@@ -15,8 +15,6 @@ export type EmojiLevel = "high" | "medium" | "low";
 /** Supported AI provider types */
 export type ProviderType = "openai" | "anthropic" | "google" | "custom";
 
-/** Session lifecycle states */
-export type SessionStatus = "draft" | "generating" | "completed" | "error";
 
 // -----------------------------------------------------------------------------
 // Platform Configuration
@@ -47,31 +45,9 @@ export interface SourceMetadata {
   imageUrls?: string[];
 }
 
-export interface Source {
-  id: string;
-  type: SourceType;
-  content: string;
-  rawUrl?: string;
-  fileName?: string;
-  fileType?: string;
-  metadata?: SourceMetadata;
-  createdAt: Date;
-}
-
 // -----------------------------------------------------------------------------
 // Scraping
 // -----------------------------------------------------------------------------
-
-export interface ScrapeRequest {
-  url: string;
-}
-
-export interface ScrapeResult {
-  success: boolean;
-  content?: string;
-  metadata?: SourceMetadata;
-  error?: string;
-}
 
 /**
  * Structured representation of a scraped web page.
@@ -164,69 +140,11 @@ export interface SocialPost {
 }
 
 // -----------------------------------------------------------------------------
-// File Upload
-// -----------------------------------------------------------------------------
-
-export type SupportedFileType = "application/pdf" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document" | "image/png" | "image/jpeg";
-
-export interface FileParseResult {
-  success: boolean;
-  content?: string;
-  fileName: string;
-  fileType: SupportedFileType;
-  error?: string;
-}
-
-// -----------------------------------------------------------------------------
-// Generated Copy
-// -----------------------------------------------------------------------------
-
-export interface GeneratedCopy {
-  id: string;
-  sessionId: string;
-  sourceId: string;
-  platform: Platform;
-  content: string;
-  toneUsed: string;
-  modelUsed: string;
-  version: number;
-  tokenCount: number;
-  createdAt: Date;
-}
-
-// -----------------------------------------------------------------------------
-// Session
-// -----------------------------------------------------------------------------
-
-export interface Session {
-  id: string;
-  userId: string;
-  title?: string;
-  sources: Source[];
-  generatedCopies: GeneratedCopy[];
-  selectedPlatforms: Platform[];
-  status: SessionStatus;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-// -----------------------------------------------------------------------------
 // User & Preferences
 // -----------------------------------------------------------------------------
 
-export interface User {
-  id: string;
-  anonId: string;
-  email?: string;
-  apiKeys: ApiKeyMap;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface ApiKeyMap {
-  openai?: string;
-  anthropic?: string;
-}
+/** Tone overrides per platform — optional */
+export type ToneOverrides = Partial<Record<Platform, string>>;
 
 /** A saved provider configuration entry (stored in localStorage and Supabase) */
 export interface ProviderEntry {
@@ -236,96 +154,6 @@ export interface ProviderEntry {
   apiKey: string;
   model: string;
   baseURL?: string;
-}
-
-export interface UserPreference {
-  id: string;
-  userId: string;
-  platform: Platform;
-  isEnabled: boolean;
-  defaultTone: string;
-  emojiLevel: EmojiLevel;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-// -----------------------------------------------------------------------------
-// API Request / Response Types
-// -----------------------------------------------------------------------------
-
-/** Tone overrides per platform — optional */
-export type ToneOverrides = Partial<Record<Platform, string>>;
-
-/** POST /api/generate request body */
-export interface GenerateRequest {
-  sessionId: string;
-  sourceId: string;
-  platforms: Platform[];
-  toneOverrides?: ToneOverrides;
-  provider?: "openai" | "anthropic";
-}
-
-/** Single platform generation result */
-export interface GeneratedCopyResult {
-  platform: Platform;
-  content: string;
-  model: string;
-  tokenCount: number;
-  version: number;
-}
-
-/** Single platform generation error */
-export interface GeneratedCopyError {
-  platform: Platform;
-  message: string;
-}
-
-/** POST /api/generate response body */
-export interface GenerateResponse {
-  copies: GeneratedCopyResult[];
-  errors: GeneratedCopyError[];
-}
-
-/** POST /api/validate-key request */
-export interface ValidateKeyRequest {
-  provider: ProviderType;
-  apiKey: string;
-}
-
-/** POST /api/validate-key response */
-export interface ValidateKeyResponse {
-  valid: boolean;
-  error?: string;
-}
-
-// -----------------------------------------------------------------------------
-// LLM Adapter Types
-// -----------------------------------------------------------------------------
-
-export type LLMRole = "system" | "user" | "assistant";
-
-export interface LLMMessage {
-  role: LLMRole;
-  content: string;
-}
-
-export interface LLMGenerateOptions {
-  messages: LLMMessage[];
-  temperature?: number;
-  maxTokens?: number;
-  model?: string;
-}
-
-export interface LLMTokenUsage {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-}
-
-export interface LLMGenerateResult {
-  content: string;
-  model: string;
-  usage: LLMTokenUsage;
 }
 
 // -----------------------------------------------------------------------------

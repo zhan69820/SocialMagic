@@ -12,20 +12,11 @@ import {
 import SocialPostCard from "@/components/SocialPostCard";
 import { useIdentity } from "@/providers/identity-provider";
 import type { Platform } from "@/types/index";
+import { type VaultItem, loadVault as loadSharedVault, saveVault as saveSharedVault } from "@/lib/utils/vault-storage";
 
 // =============================================================================
 // Types
 // =============================================================================
-
-interface VaultItem {
-  id: string;
-  platform: Platform;
-  body: string;
-  tone: string;
-  alchemySuccessRate: number;
-  createdAt: string;
-  sourceTitle?: string;
-}
 
 interface BackendPost {
   id: string;
@@ -50,24 +41,6 @@ interface DisplayItem {
 }
 
 // =============================================================================
-// localStorage helpers
-// =============================================================================
-
-const VAULT_KEY = "sm_vault";
-
-function loadLocalVault(): VaultItem[] {
-  try {
-    return JSON.parse(localStorage.getItem(VAULT_KEY) ?? "[]");
-  } catch {
-    return [];
-  }
-}
-
-function saveLocalVault(items: VaultItem[]) {
-  localStorage.setItem(VAULT_KEY, JSON.stringify(items));
-}
-
-// =============================================================================
 // Vault page — Dark Glass Edition
 // =============================================================================
 
@@ -81,7 +54,7 @@ export default function VaultPage() {
     setLoading(true);
     setError("");
 
-    const localItems = loadLocalVault();
+    const localItems = loadSharedVault();
 
     let remotePosts: BackendPost[] = [];
     if (anonId) {
@@ -184,8 +157,8 @@ export default function VaultPage() {
       }
     }
 
-    const localItems = loadLocalVault().filter((i) => i.id !== id);
-    saveLocalVault(localItems);
+    const localItems = loadSharedVault().filter((i) => i.id !== id);
+    saveSharedVault(localItems);
     setItems((prev) => prev.filter((i) => i.id !== id));
   };
 

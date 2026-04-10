@@ -3,6 +3,8 @@ import { v4 as uuidv4 } from "uuid";
 import { createServerClient } from "@/lib/supabase/client";
 import { parsePdf } from "@/lib/parsers/pdf";
 import { parseDocx } from "@/lib/parsers/docx";
+import { calculateWordCount } from "@/lib/utils/calculate-word-count";
+import { mapRowToContent } from "@/lib/utils/map-row-to-content";
 import type { Content, SourceType } from "@/types/index";
 
 // ---------------------------------------------------------------------------
@@ -170,28 +172,4 @@ export async function POST(
   }
 
   return NextResponse.json({ success: true, content }, { status: 201 });
-}
-
-function calculateWordCount(text: string): number {
-  const cjkChars = (text.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g) ?? []).length;
-  const withoutCjk = text.replace(/[\u4e00-\u9fff\u3400-\u4dbf]/g, " ");
-  const latinWords = withoutCjk.split(/\s+/).filter((w) => w.length > 0).length;
-  return cjkChars + latinWords;
-}
-
-function mapRowToContent(row: Record<string, unknown>, profileId: string): Content {
-  return {
-    id: row.id as string,
-    profileId,
-    sourceType: row.source_type as Content["sourceType"],
-    title: (row.title as string) ?? null,
-    rawUrl: (row.raw_url as string) ?? null,
-    rawText: row.raw_text as string,
-    fileName: (row.file_name as string) ?? null,
-    fileType: (row.file_type as string) ?? null,
-    wordCount: (row.word_count as number) ?? 0,
-    metadata: (row.metadata as Content["metadata"]) ?? {},
-    createdAt: row.created_at as string,
-    updatedAt: (row.updated_at as string) ?? (row.created_at as string),
-  };
 }

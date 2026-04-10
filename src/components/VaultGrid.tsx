@@ -6,35 +6,7 @@ import { Archive, Trash2 } from "lucide-react";
 import SocialPostCard from "@/components/SocialPostCard";
 import { useIdentity } from "@/providers/identity-provider";
 import type { Platform } from "@/types/index";
-
-// =============================================================================
-// Vault item — stored in localStorage
-// =============================================================================
-
-interface VaultItem {
-  id: string;
-  platform: Platform;
-  body: string;
-  tone: string;
-  alchemySuccessRate: number;
-  createdAt: string;
-  sourceTitle?: string;
-}
-
-const VAULT_KEY = "sm_vault";
-
-function loadVault(): VaultItem[] {
-  if (typeof window === "undefined") return [];
-  try {
-    return JSON.parse(localStorage.getItem(VAULT_KEY) ?? "[]");
-  } catch {
-    return [];
-  }
-}
-
-function saveVault(items: VaultItem[]) {
-  localStorage.setItem(VAULT_KEY, JSON.stringify(items));
-}
+import { type VaultItem, loadVault, saveVault } from "@/lib/utils/vault-storage";
 
 // =============================================================================
 // VaultGrid — Dark Glass Edition
