@@ -601,9 +601,21 @@ export default function AlchemyWorkbench() {
 
             {/* Platform selector — rich cards */}
             <div className="mb-8">
-              <p className="text-[11px] uppercase tracking-wider font-medium mb-5" style={{ color: "var(--text-quaternary)" }}>
-                选择目标平台
-              </p>
+              <div className="flex items-center justify-between mb-5">
+                <p className="text-[11px] uppercase tracking-wider font-medium" style={{ color: "var(--text-quaternary)" }}>
+                  选择目标平台
+                </p>
+                <button
+                  onClick={() => {
+                    const allPlatforms = Object.keys(PLATFORM_META) as Platform[];
+                    const allSelected = allPlatforms.every((p) => selectedPlatforms.has(p));
+                    setSelectedPlatforms(allSelected ? new Set() : new Set(allPlatforms));
+                  }}
+                  className="text-[11px] font-medium text-violet-400 hover:text-violet-300 transition-colors duration-200"
+                >
+                  {selectedPlatforms.size === (Object.keys(PLATFORM_META) as Platform[]).length ? "取消全选" : "全选"}
+                </button>
+              </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {(Object.keys(PLATFORM_META) as Platform[]).map((p, idx) => {
                   const meta = PLATFORM_META[p];

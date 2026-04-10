@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Copy, Check, RefreshCw, Repeat } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Check, RefreshCw, Repeat, Download, ClipboardList } from "lucide-react";
 import type { Platform } from "@/types/index";
 import PlatformIcon from "@/components/PlatformIcon";
 import { useTypewriter } from "@/hooks/useTypewriter";
@@ -153,6 +153,36 @@ export default function ResultCarousel({
       setCopiedIdx(idx);
       setTimeout(() => setCopiedIdx(-1), 2000);
     }
+  };
+
+  const handleCopyAll = async () => {
+    const allText = items
+      .map((item) => {
+        const theme = PLATFORM_THEME[item.platform];
+        return `【${theme.label}】\n${item.body}`;
+      })
+      .join("\n\n---\n\n");
+    const ok = await copyWithHaptic(allText);
+    if (ok) {
+      setCopiedIdx(-2);
+      setTimeout(() => setCopiedIdx(-1), 2000);
+    }
+  };
+
+  const handleExportTxt = () => {
+    const text = items
+      .map((item) => {
+        const theme = PLATFORM_THEME[item.platform];
+        return `【${theme.label}】\n${item.body}`;
+      })
+      .join("\n\n---\n\n");
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `socialmagic-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // Streaming mode — show all cards stacked
@@ -367,21 +397,57 @@ export default function ResultCarousel({
         )}
       </div>
 
-      {/* Reset button */}
-      {onReset && (
+      {/* Action buttons */}
+      <div className="flex items-center gap-3 mt-5">
+        {onReset && (
+          <motion.button
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            onClick={onReset}
+            whileTap={{ scale: 0.97 }}
+            className="flex-1 py-3 rounded-2xl border flex items-center justify-center gap-2 text-[13px] transition-all duration-200 glass-card"
+            style={{ color: "var(--text-tertiary)" }}
+          >
+            <RefreshCw className="w-4 h-4" />
+            开始新的炼金
+          </motion.button>
+        )}
+
         <motion.button
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          onClick={onReset}
+          transition={{ delay: 0.4 }}
+          onClick={handleCopyAll}
           whileTap={{ scale: 0.97 }}
-          className="w-full mt-5 py-3 rounded-2xl border flex items-center justify-center gap-2 text-[13px] transition-all duration-200 glass-card"
+          className={`
+            flex-1 py-3 rounded-2xl border flex items-center justify-center gap-2 text-[13px] font-medium transition-all duration-200
+            ${copiedIdx === -2
+              ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/20"
+              : "glass-card border-violet-500/20 text-violet-400 hover:bg-violet-500/[0.06]"
+            }
+          `}
+        >
+          {copiedIdx === -2 ? (
+            <><Check className="w-4 h-4" /> 已复制全部</>
+          ) : (
+            <><ClipboardList className="w-4 h-4" /> 复制全部</>
+          )}
+        </motion.button>
+
+        <motion.button
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          onClick={handleExportTxt}
+          whileTap={{ scale: 0.97 }}
+          className="flex-1 py-3 rounded-2xl border flex items-center justify-center gap-2 text-[13px] transition-all duration-200 glass-card"
           style={{ color: "var(--text-tertiary)" }}
         >
-          <RefreshCw className="w-4 h-4" />
-          开始新的炼金
+          <Download className="w-4 h-4" />
+          导出 TXT
         </motion.button>
-      )}
+      </div>
     </motion.div>
   );
 }
