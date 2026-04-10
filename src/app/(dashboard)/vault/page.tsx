@@ -68,7 +68,7 @@ function saveLocalVault(items: VaultItem[]) {
 }
 
 // =============================================================================
-// Vault page — fetches backend + localStorage merged view
+// Vault page — Dark Glass Edition
 // =============================================================================
 
 export default function VaultPage() {
@@ -81,10 +81,8 @@ export default function VaultPage() {
     setLoading(true);
     setError("");
 
-    // 1. Load local vault
     const localItems = loadLocalVault();
 
-    // 2. Try fetching from backend
     let remotePosts: BackendPost[] = [];
     if (anonId) {
       try {
@@ -100,7 +98,6 @@ export default function VaultPage() {
       }
     }
 
-    // 3. Build maps keyed by id
     const remoteMap = new Map<string, BackendPost>();
     for (const p of remotePosts) {
       remoteMap.set(p.id, p);
@@ -111,7 +108,6 @@ export default function VaultPage() {
       localMap.set(item.id, item);
     }
 
-    // 4. Merge: union by id, remote body takes precedence
     const allIds = new Set([...remoteMap.keys(), ...localMap.keys()]);
     const merged: DisplayItem[] = [];
 
@@ -154,7 +150,6 @@ export default function VaultPage() {
       }
     }
 
-    // Sort newest first
     merged.sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -173,7 +168,6 @@ export default function VaultPage() {
   const handleDelete = async (id: string) => {
     const item = items.find((i) => i.id === id);
 
-    // Only call backend for items that exist remotely
     if (anonId && item && item.source !== "local") {
       try {
         const res = await fetch(`/api/posts/${id}`, {
@@ -186,11 +180,10 @@ export default function VaultPage() {
           return;
         }
       } catch {
-        // Network error — still allow local cleanup as graceful fallback
+        // Network error — still allow local cleanup
       }
     }
 
-    // Sync local state + localStorage
     const localItems = loadLocalVault().filter((i) => i.id !== id);
     saveLocalVault(localItems);
     setItems((prev) => prev.filter((i) => i.id !== id));
@@ -205,11 +198,11 @@ export default function VaultPage() {
         transition={{ type: "spring", stiffness: 260, damping: 22 }}
       >
         <div className="flex items-center gap-3 mb-8">
-          <Archive className="w-5 h-5 text-violet-500" />
-          <h1 className="text-[24px] font-bold tracking-tight text-gray-900">
+          <Archive className="w-5 h-5 text-violet-400" />
+          <h1 className="text-[24px] font-bold tracking-tight text-gradient">
             宝库
           </h1>
-          <span className="text-[12px] text-gray-400 ml-auto">
+          <span className="text-[12px] text-gray-600 ml-auto">
             {items.length} 条文案
           </span>
         </div>
@@ -217,7 +210,7 @@ export default function VaultPage() {
 
       {/* Error */}
       {error && (
-        <div className="flex items-center gap-2 p-4 rounded-2xl bg-red-50/80 border border-red-100 text-[13px] text-red-600 mb-4">
+        <div className="flex items-center gap-2 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-[13px] text-red-400 mb-4">
           <AlertCircle className="w-4 h-4 shrink-0" />
           {error}
         </div>
@@ -226,8 +219,8 @@ export default function VaultPage() {
       {/* Loading */}
       {loading && (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-6 h-6 text-violet-500 animate-spin" />
-          <span className="ml-3 text-[14px] text-gray-400">
+          <Loader2 className="w-6 h-6 text-violet-400 animate-spin" />
+          <span className="ml-3 text-[14px] text-gray-600">
             正在加载宝库...
           </span>
         </div>
@@ -235,10 +228,10 @@ export default function VaultPage() {
 
       {/* Empty */}
       {!loading && items.length === 0 && (
-        <div className="flex flex-col items-center py-20 text-gray-300">
+        <div className="flex flex-col items-center py-20 text-gray-700">
           <CloudOff className="w-12 h-12 mb-4" />
-          <p className="text-[14px]">宝库空空如也</p>
-          <p className="text-[12px] mt-1">
+          <p className="text-[14px] text-gray-600">宝库空空如也</p>
+          <p className="text-[12px] mt-1 text-gray-700">
             开始炼金后，生成的文案会自动保存在这里
           </p>
         </div>
@@ -264,18 +257,18 @@ export default function VaultPage() {
                     />
                     <button
                       onClick={() => handleDelete(item.id)}
-                      className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-lg bg-white/80 backdrop-blur text-gray-300 hover:text-red-500 hover:bg-white transition opacity-0 group-hover/card:opacity-100"
+                      className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-lg bg-black/40 backdrop-blur text-gray-700 hover:text-red-400 hover:bg-red-500/10 transition opacity-0 group-hover/card:opacity-100"
                       aria-label="删除"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                     {item.source === "local" && (
-                      <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-amber-50 text-[10px] text-amber-600 font-medium">
+                      <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-amber-500/10 text-[10px] text-amber-400 font-medium backdrop-blur-sm">
                         本地
                       </span>
                     )}
                     {item.source === "remote" && (
-                      <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-blue-50 text-[10px] text-blue-600 font-medium">
+                      <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-blue-500/10 text-[10px] text-blue-400 font-medium backdrop-blur-sm">
                         云端
                       </span>
                     )}
@@ -301,18 +294,18 @@ export default function VaultPage() {
                     />
                     <button
                       onClick={() => handleDelete(item.id)}
-                      className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-lg bg-white/80 backdrop-blur text-gray-300 hover:text-red-500 hover:bg-white transition opacity-0 group-hover/card:opacity-100"
+                      className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-lg bg-black/40 backdrop-blur text-gray-700 hover:text-red-400 hover:bg-red-500/10 transition opacity-0 group-hover/card:opacity-100"
                       aria-label="删除"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                     {item.source === "local" && (
-                      <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-amber-50 text-[10px] text-amber-600 font-medium">
+                      <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-amber-500/10 text-[10px] text-amber-400 font-medium backdrop-blur-sm">
                         本地
                       </span>
                     )}
                     {item.source === "remote" && (
-                      <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-blue-50 text-[10px] text-blue-600 font-medium">
+                      <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-blue-500/10 text-[10px] text-blue-400 font-medium backdrop-blur-sm">
                         云端
                       </span>
                     )}

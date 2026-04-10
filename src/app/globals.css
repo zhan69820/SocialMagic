@@ -1,13 +1,172 @@
 @import "tailwindcss";
 
+/* =============================================================================
+   SocialMagic — Dark Aurora / Cosmic Alchemy Design System
+   ============================================================================= */
+
 @theme {
-  --color-apple-gray: #F5F5F7;
-  --color-apple-blue: #0071E3;
-  --shadow-apple: 0 4px 24px rgba(0, 0, 0, 0.04);
+  --color-aurora-purple: #8b5cf6;
+  --color-aurora-cyan: #06b6d4;
+  --color-aurora-pink: #d946ef;
+  --color-deep-black: #0a0a0f;
+  --color-deep-surface: #111118;
+  --color-deep-card: #16161e;
 }
 
+/* --- Base layer --- */
+
 @layer base {
-  body {
-    @apply bg-[--color-apple-gray] antialiased;
+  html {
+    color-scheme: dark;
   }
+
+  body {
+    background: linear-gradient(160deg, #0a0a0f 0%, #111118 40%, #0d0d14 100%);
+    min-height: 100vh;
+    color: #e5e7eb;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background: rgba(139, 92, 246, 0.35);
+    color: #fff;
+  }
+}
+
+/* --- Scrollbar --- */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* =============================================================================
+   Keyframes
+   ============================================================================= */
+
+@keyframes aurora-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes border-glow {
+  0%, 100% { border-color: rgba(139, 92, 246, 0.3); }
+  33% { border-color: rgba(6, 182, 212, 0.3); }
+  66% { border-color: rgba(217, 70, 239, 0.25); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes gradient-text {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* =============================================================================
+   Utility classes
+   ============================================================================= */
+
+.animate-aurora {
+  animation: aurora-shift 8s ease infinite;
+  background-size: 200% 200%;
+}
+
+.animate-border-glow {
+  animation: border-glow 4s ease infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer 3s linear infinite;
+  background-size: 200% 100%;
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+.animate-gradient-text {
+  animation: gradient-text 6s ease infinite;
+  background-size: 200% 200%;
+}
+
+/* Gradient text utility */
+.text-gradient {
+  background: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 50%, #d946ef 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-shimmer {
+  background: linear-gradient(
+    90deg,
+    #8b5cf6 0%,
+    #06b6d4 25%,
+    #d946ef 50%,
+    #8b5cf6 75%,
+    #06b6d4 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradient-text 4s ease infinite;
+}
+
+/* Glass card base */
+.glass-dark {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+}
+
+.glass-dark-hover:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Neon glow effects */
+.glow-violet {
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.15), 0 0 60px rgba(139, 92, 246, 0.05);
+}
+
+.glow-cyan {
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.15), 0 0 60px rgba(6, 182, 212, 0.05);
+}
+
+/* Background ambient orbs */
+.bg-orb {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
 }

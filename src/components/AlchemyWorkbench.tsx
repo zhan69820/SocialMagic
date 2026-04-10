@@ -9,6 +9,7 @@ import {
   AlertCircle,
   RefreshCw,
   Paperclip,
+  Sparkles,
 } from "lucide-react";
 import { useIdentity } from "@/providers/identity-provider";
 import SocialPostCard from "@/components/SocialPostCard";
@@ -17,7 +18,7 @@ import PlatformIcon from "@/components/PlatformIcon";
 import type { Platform, Content, ProviderEntry } from "@/types/index";
 
 // =============================================================================
-// Platform meta
+// Platform meta — dark theme colors
 // =============================================================================
 
 const PLATFORM_META: Record<
@@ -27,31 +28,36 @@ const PLATFORM_META: Record<
     color: string;
     bgActive: string;
     ringActive: string;
+    glowColor: string;
   }
 > = {
   xiaohongshu: {
     label: "小红书",
-    color: "text-red-500",
-    bgActive: "bg-red-50",
-    ringActive: "ring-red-200",
+    color: "text-red-400",
+    bgActive: "bg-red-500/10",
+    ringActive: "ring-red-500/30",
+    glowColor: "shadow-red-500/10",
   },
   wechat: {
     label: "微信",
-    color: "text-green-600",
-    bgActive: "bg-green-50",
-    ringActive: "ring-green-200",
+    color: "text-green-400",
+    bgActive: "bg-green-500/10",
+    ringActive: "ring-green-500/30",
+    glowColor: "shadow-green-500/10",
   },
   douyin: {
     label: "抖音",
-    color: "text-gray-900",
-    bgActive: "bg-gray-50",
-    ringActive: "ring-gray-300",
+    color: "text-cyan-400",
+    bgActive: "bg-cyan-500/10",
+    ringActive: "ring-cyan-500/30",
+    glowColor: "shadow-cyan-500/10",
   },
   weibo: {
     label: "微博",
-    color: "text-orange-500",
-    bgActive: "bg-orange-50",
-    ringActive: "ring-orange-200",
+    color: "text-orange-400",
+    bgActive: "bg-orange-500/10",
+    ringActive: "ring-orange-500/30",
+    glowColor: "shadow-orange-500/10",
   },
 };
 
@@ -114,7 +120,7 @@ interface GeneratedCopy {
 }
 
 // =============================================================================
-// Main component
+// Main component — Dark Alchemy Edition
 // =============================================================================
 
 export default function AlchemyWorkbench() {
@@ -373,15 +379,14 @@ export default function AlchemyWorkbench() {
     selectedPlatforms.size > 0;
   const showWorkbench = phase === "ingested" || phase === "generating";
 
-  // Blur everything except the input area when focused
   const blurClass =
     inputFocused && phase === "idle"
-      ? "blur-[3px] opacity-40 pointer-events-none scale-[0.98]"
+      ? "blur-[2px] opacity-30 pointer-events-none scale-[0.98]"
       : "";
   const blurTransition = "transition-all duration-500 ease-out";
 
   return (
-    <div className="flex flex-col items-center">
+    <div className="flex flex-col items-center relative z-10">
       {/* Hero */}
       <motion.div
         initial={{ opacity: 0, y: 24 }}
@@ -389,15 +394,15 @@ export default function AlchemyWorkbench() {
         transition={{ ...SPRING_ENTER, delay: 0.05 }}
         className={`text-center mb-8 ${blurClass} ${blurTransition}`}
       >
-        <h1 className="text-[32px] md:text-[40px] font-bold tracking-tight text-gray-900">
+        <h1 className="text-[32px] md:text-[40px] font-bold tracking-tight text-gradient-shimmer animate-gradient-text">
           SocialMagic
         </h1>
-        <p className="mt-2 text-[15px] text-gray-400">
+        <p className="mt-2 text-[15px] text-gray-500">
           投入素材，炼出黄金文案
         </p>
       </motion.div>
 
-      {/* Spotlight input + file upload — always crisp */}
+      {/* Spotlight input + file upload */}
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
@@ -407,15 +412,15 @@ export default function AlchemyWorkbench() {
         <div
           className="
             relative flex items-center gap-4 px-6 py-4
-            rounded-2xl bg-white/10 backdrop-blur-xl
-            border border-white/30
-            shadow-[0_8px_40px_rgba(0,0,0,0.08)]
+            rounded-2xl backdrop-blur-xl
+            bg-white/[0.04] border border-white/[0.08]
+            shadow-[0_8px_40px_rgba(0,0,0,0.3)]
             transition-all duration-300
-            focus-within:border-[#0071E3]/30
-            focus-within:shadow-[0_0_0_4px_rgba(0,113,227,0.12),0_8px_40px_rgba(0,0,0,0.12)]
+            focus-within:border-violet-500/40
+            focus-within:shadow-[0_0_0_4px_rgba(139,92,246,0.12),0_8px_40px_rgba(0,0,0,0.4),0_0_40px_rgba(139,92,246,0.08)]
           "
         >
-          <Search className="w-5 h-5 text-gray-300 shrink-0" />
+          <Search className="w-5 h-5 text-gray-600 shrink-0" />
           <input
             type="url"
             value={url}
@@ -427,14 +432,14 @@ export default function AlchemyWorkbench() {
             }
             placeholder="粘贴文章/YouTube/Bilibili链接，开始炼金..."
             disabled={phase !== "idle"}
-            className="flex-1 bg-transparent outline-none text-[15px] text-gray-800 placeholder:text-gray-300 disabled:opacity-40"
+            className="flex-1 bg-transparent outline-none text-[15px] text-white placeholder:text-gray-600 disabled:opacity-40"
           />
 
           {/* File upload button */}
           {phase === "idle" && (
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-300 hover:text-[#0071E3] hover:bg-[#0071E3]/5 transition-colors duration-200"
+              className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-600 hover:text-violet-400 hover:bg-violet-500/10 transition-colors duration-200"
               aria-label="上传文件"
               title="上传 PDF/Word 文件"
             >
@@ -454,13 +459,13 @@ export default function AlchemyWorkbench() {
               onClick={handleIngest}
               disabled={!canIngest}
               whileTap={canIngest ? { scale: 0.95 } : {}}
-              className="px-6 py-2 rounded-xl bg-[#0071E3] text-white text-[13px] font-semibold hover:bg-[#0077ED] disabled:opacity-25 disabled:cursor-not-allowed transition-colors duration-200"
+              className="px-6 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-[13px] font-semibold hover:from-violet-500 hover:to-cyan-400 disabled:opacity-25 disabled:cursor-not-allowed transition-all duration-200 shadow-[0_4px_16px_rgba(139,92,246,0.3)]"
             >
               开始炼金
             </motion.button>
           )}
           {(phase === "ingesting" || phase === "generating") && (
-            <Loader2 className="w-5 h-5 text-[#0071E3] animate-spin shrink-0" />
+            <Loader2 className="w-5 h-5 text-violet-400 animate-spin shrink-0" />
           )}
         </div>
       </motion.div>
@@ -476,9 +481,9 @@ export default function AlchemyWorkbench() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 4 }}
               transition={{ ...SPRING_ENTER, duration: 0.4 }}
-              className="mt-4 flex items-center gap-2 text-[13px] text-[#0071E3]"
+              className="mt-4 flex items-center gap-2 text-[13px] text-violet-400"
             >
-              <span>{progressMsg}</span>
+              <span className="animate-pulse-glow">{progressMsg}</span>
             </motion.div>
           )}
       </AnimatePresence>
@@ -498,7 +503,7 @@ export default function AlchemyWorkbench() {
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
               transition={SPRING_ENTER}
-              className="flex items-center gap-2 text-[13px] text-emerald-600 mb-8"
+              className="flex items-center gap-2 text-[13px] text-emerald-400 mb-8"
             >
               <CheckCircle2 className="w-4 h-4" />
               <span>
@@ -509,7 +514,7 @@ export default function AlchemyWorkbench() {
 
             {/* Platform selector */}
             <div className="mb-8">
-              <p className="text-[11px] text-gray-400 uppercase tracking-wider font-medium mb-4">
+              <p className="text-[11px] text-gray-600 uppercase tracking-wider font-medium mb-4">
                 选择目标平台
               </p>
               <div className="flex gap-3">
@@ -533,24 +538,24 @@ export default function AlchemyWorkbench() {
                       transition={SPRING_TAP}
                       className={`
                         flex flex-col items-center gap-2 px-5 py-4 rounded-2xl
-                        border transition-colors duration-200
+                        border backdrop-blur-xl transition-all duration-300
                         ${
                           selected
-                            ? `${meta.bgActive} ${meta.ringActive} ring-1 shadow-sm`
-                            : "bg-white/10 border-white/20 hover:bg-white/20"
+                            ? `${meta.bgActive} ${meta.ringActive} ring-1 shadow-lg ${meta.glowColor}`
+                            : "bg-white/[0.03] border-white/[0.08] hover:bg-white/[0.06] hover:border-white/[0.14]"
                         }
                       `}
                     >
                       <span
                         className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors duration-200 ${
-                          selected ? meta.color : "text-gray-300"
+                          selected ? meta.color : "text-gray-600"
                         }`}
                       >
                         <PlatformIcon platform={p} size={28} />
                       </span>
                       <span
                         className={`text-[12px] font-medium transition-colors duration-200 ${
-                          selected ? "text-gray-800" : "text-gray-400"
+                          selected ? "text-white/90" : "text-gray-600"
                         }`}
                       >
                         {meta.label}
@@ -570,12 +575,15 @@ export default function AlchemyWorkbench() {
                 w-full py-4 rounded-2xl text-[15px] font-semibold transition-all duration-300
                 ${
                   canGenerate
-                    ? "bg-[#0071E3] text-white shadow-[0_4px_16px_rgba(0,113,227,0.25)] hover:shadow-[0_8px_24px_rgba(0,113,227,0.35)]"
-                    : "bg-gray-200/50 text-gray-400 cursor-not-allowed"
+                    ? "bg-gradient-to-r from-violet-600 to-cyan-500 text-white shadow-[0_4px_30px_rgba(139,92,246,0.4)] hover:shadow-[0_8px_40px_rgba(139,92,246,0.5)]"
+                    : "bg-white/[0.04] text-gray-600 cursor-not-allowed border border-white/[0.06]"
                 }
               `}
             >
-              炼出文案 ({selectedPlatforms.size} 个平台)
+              <span className="flex items-center justify-center gap-2">
+                <Sparkles className="w-4 h-4" />
+                炼出文案 ({selectedPlatforms.size} 个平台)
+              </span>
             </motion.button>
           </motion.div>
         )}
@@ -589,7 +597,7 @@ export default function AlchemyWorkbench() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={SPRING_ENTER}
-            className={`w-full max-w-[600px] mt-4 flex items-start gap-3 p-4 rounded-2xl bg-red-50/80 backdrop-blur-xl border border-red-100 text-[13px] text-red-600 ${blurClass} ${blurTransition}`}
+            className={`w-full max-w-[600px] mt-4 flex items-start gap-3 p-4 rounded-2xl bg-red-500/10 backdrop-blur-xl border border-red-500/20 text-[13px] text-red-400 ${blurClass} ${blurTransition}`}
           >
             <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
             {errorMsg}
@@ -597,7 +605,7 @@ export default function AlchemyWorkbench() {
         )}
       </AnimatePresence>
 
-      {/* Streaming cards — during generation */}
+      {/* Streaming cards */}
       <AnimatePresence>
         {phase === "generating" && (
           <motion.div
@@ -605,7 +613,7 @@ export default function AlchemyWorkbench() {
             animate={{ opacity: 1 }}
             className={`w-full max-w-[600px] mt-8 space-y-4 ${blurClass} ${blurTransition}`}
           >
-            <p className="text-[11px] text-gray-400 uppercase tracking-wider font-medium">
+            <p className="text-[11px] text-gray-600 uppercase tracking-wider font-medium">
               炼金进行中
             </p>
 
@@ -652,7 +660,7 @@ export default function AlchemyWorkbench() {
             animate={{ opacity: 1 }}
             className="w-full max-w-[600px] mt-8 space-y-4"
           >
-            <p className="text-[11px] text-gray-400 uppercase tracking-wider font-medium">
+            <p className="text-[11px] text-gray-600 uppercase tracking-wider font-medium">
               炼金结果
             </p>
 
@@ -674,7 +682,7 @@ export default function AlchemyWorkbench() {
               transition={{ delay: copies.length * 0.1 + 0.15 }}
               onClick={reset}
               whileTap={{ scale: 0.97 }}
-              className="w-full py-3 rounded-2xl border border-gray-200/60 text-[13px] text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors duration-200"
+              className="w-full py-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] text-[13px] text-gray-600 hover:text-gray-400 hover:border-white/[0.14] hover:bg-white/[0.04] transition-all duration-200"
             >
               <span className="flex items-center justify-center gap-2">
                 <RefreshCw className="w-4 h-4" />

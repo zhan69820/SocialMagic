@@ -13,8 +13,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="zh-CN">
-      <body className="bg-[#F5F5F7] antialiased">
+    <html lang="zh-CN" className="dark">
+      <body className="antialiased">
+        {/* Ambient background orbs */}
+        <div className="bg-orb w-[500px] h-[500px] top-[-10%] left-[-5%] bg-violet-600/[0.07]" />
+        <div className="bg-orb w-[400px] h-[400px] top-[30%] right-[-8%] bg-cyan-500/[0.05]" />
+        <div className="bg-orb w-[300px] h-[300px] bottom-[5%] left-[20%] bg-fuchsia-500/[0.04]" />
+
         <IdentityProvider>{children}</IdentityProvider>
       </body>
     </html>

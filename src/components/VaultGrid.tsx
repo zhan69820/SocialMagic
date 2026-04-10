@@ -37,11 +37,10 @@ function saveVault(items: VaultItem[]) {
 }
 
 // =============================================================================
-// VaultGrid — masonry-style grid with spring animations
+// VaultGrid — Dark Glass Edition
 // =============================================================================
 
 export interface VaultGridProps {
-  /** New items to push into the vault (from generation results) */
   newItems?: VaultItem[];
 }
 
@@ -49,19 +48,16 @@ export default function VaultGrid({ newItems }: VaultGridProps) {
   const [items, setItems] = useState<VaultItem[]>([]);
   const { anonId, ready } = useIdentity();
 
-  // Load vault on mount
   useEffect(() => {
     if (ready) {
       setItems(loadVault());
     }
   }, [ready]);
 
-  // Push new items when they arrive
   useEffect(() => {
     if (!newItems || newItems.length === 0) return;
 
     setItems((prev) => {
-      // Deduplicate by id
       const existingIds = new Set(prev.map((i) => i.id));
       const fresh = newItems.filter((i) => !existingIds.has(i.id));
       if (fresh.length === 0) return prev;
@@ -73,7 +69,6 @@ export default function VaultGrid({ newItems }: VaultGridProps) {
   }, [newItems]);
 
   const handleDelete = async (id: string) => {
-    // Step 1: Attempt backend delete (if user is identified)
     if (anonId) {
       try {
         const res = await fetch(`/api/posts/${id}`, {
@@ -83,16 +78,14 @@ export default function VaultGrid({ newItems }: VaultGridProps) {
         const data = await res.json();
 
         if (!data.success) {
-          // Backend rejected — don't remove locally either
           console.error("Delete rejected:", data.error);
           return;
         }
       } catch {
-        // Network error — allow offline local delete as graceful fallback
+        // Network error — allow offline local delete
       }
     }
 
-    // Step 2: Sync local state + localStorage
     setItems((prev) => {
       const updated = prev.filter((i) => i.id !== id);
       saveVault(updated);
@@ -106,16 +99,15 @@ export default function VaultGrid({ newItems }: VaultGridProps) {
     <div className="mt-16">
       {/* Section header */}
       <div className="flex items-center gap-2 mb-6">
-        <Archive className="w-4 h-4 text-gray-400" />
-        <h2 className="text-[13px] font-medium text-gray-400 uppercase tracking-wider">
+        <Archive className="w-4 h-4 text-gray-600" />
+        <h2 className="text-[13px] font-medium text-gray-600 uppercase tracking-wider">
           我的宝库
         </h2>
-        <span className="text-[11px] text-gray-300 ml-auto">{items.length} 条文案</span>
+        <span className="text-[11px] text-gray-700 ml-auto">{items.length} 条文案</span>
       </div>
 
-      {/* Masonry grid — 2 columns on desktop, 1 on mobile */}
+      {/* Masonry grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Left column */}
         <div className="space-y-4">
           <AnimatePresence mode="popLayout">
             {items
@@ -132,7 +124,7 @@ export default function VaultGrid({ newItems }: VaultGridProps) {
                   />
                   <button
                     onClick={() => handleDelete(item.id)}
-                    className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-lg bg-white/80 backdrop-blur text-gray-300 hover:text-red-500 hover:bg-white transition opacity-0 group-hover/card:opacity-100"
+                    className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-lg bg-black/40 backdrop-blur text-gray-700 hover:text-red-400 hover:bg-red-500/10 transition opacity-0 group-hover/card:opacity-100"
                     aria-label="删除"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -142,7 +134,6 @@ export default function VaultGrid({ newItems }: VaultGridProps) {
           </AnimatePresence>
         </div>
 
-        {/* Right column */}
         <div className="space-y-4">
           <AnimatePresence mode="popLayout">
             {items
@@ -159,7 +150,7 @@ export default function VaultGrid({ newItems }: VaultGridProps) {
                   />
                   <button
                     onClick={() => handleDelete(item.id)}
-                    className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-lg bg-white/80 backdrop-blur text-gray-300 hover:text-red-500 hover:bg-white transition opacity-0 group-hover/card:opacity-100"
+                    className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-lg bg-black/40 backdrop-blur text-gray-700 hover:text-red-400 hover:bg-red-500/10 transition opacity-0 group-hover/card:opacity-100"
                     aria-label="删除"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -173,7 +164,6 @@ export default function VaultGrid({ newItems }: VaultGridProps) {
   );
 }
 
-/** Helper to push generation results into vault format */
 export function resultsToVaultItems(
   copies: Array<{ platform: Platform; body: string; tone: string; alchemySuccessRate: number }>,
   sourceTitle?: string
