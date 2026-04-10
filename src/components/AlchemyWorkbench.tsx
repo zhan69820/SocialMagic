@@ -314,6 +314,18 @@ export default function AlchemyWorkbench() {
           } catch { /* skip */ }
         }
       }
+      // Flush residual buffer — last SSE event may lack trailing \n
+      if (buffer.startsWith("data: ")) {
+        try {
+          const data = JSON.parse(buffer.slice(6));
+          if (data.type === "complete") {
+            completedResults.push({ platform: data.platform, body: data.body, tone: data.tone || "", alchemySuccessRate: data.alchemySuccessRate || 0 });
+            setCopies([...completedResults]);
+          } else if (data.type === "error") {
+            setErrorMsg((prev) => prev ? `${prev}; ${data.message}` : data.message);
+          }
+        } catch { /* skip */ }
+      }
       if (completedResults.length > 0) {
         setVaultItems(resultsToVaultItems(completedResults, content?.title ?? undefined));
       }
@@ -387,6 +399,17 @@ export default function AlchemyWorkbench() {
             }
           } catch { /* skip */ }
         }
+      }
+      // Flush residual buffer
+      if (buffer.startsWith("data: ")) {
+        try {
+          const data = JSON.parse(buffer.slice(6));
+          if (data.type === "complete" && data.platform === platform) {
+            regenResult = { platform: data.platform, body: data.body, tone: data.tone || "", alchemySuccessRate: data.alchemySuccessRate || 0 };
+          } else if (data.type === "error") {
+            setErrorMsg(data.message);
+          }
+        } catch { /* skip */ }
       }
       if (regenResult) {
         setCopies((prev) => [...prev.filter((c) => c.platform !== platform), regenResult!]);

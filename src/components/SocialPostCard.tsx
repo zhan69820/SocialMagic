@@ -111,16 +111,18 @@ export default function SocialPostCard({
         </div>
 
         {/* Score gauge */}
-        <div className="flex items-center gap-1.5 relative">
-          <svg width="28" height="28" viewBox="0 0 28 28" style={{ color: "var(--bg-card-border)" }}>
-            <circle cx="14" cy="14" r="11" fill="none" stroke="currentColor" strokeWidth="2.5" />
+        <div className="relative w-8 h-8">
+          <svg width="32" height="32" viewBox="0 0 32 32" style={{ color: "var(--bg-card-border)" }}>
+            <circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" strokeWidth="2.5" />
           </svg>
           {!streaming && (
-            <svg width="28" height="28" viewBox="0 0 28 28" className={`absolute ${getScoreColor(alchemySuccessRate)}`} style={{ transform: "rotate(-90deg)" }}>
-              <circle cx="14" cy="14" r="11" fill="none" stroke="currentColor" strokeWidth="2.5" strokeDasharray={`${alchemySuccessRate * 0.691} 69.1`} strokeLinecap="round" />
+            <svg width="32" height="32" viewBox="0 0 32 32" className={`absolute top-0 left-0 ${getScoreColor(alchemySuccessRate)}`} style={{ transform: "rotate(-90deg)" }}>
+              <circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" strokeWidth="2.5" strokeDasharray={`${alchemySuccessRate * 0.817} 81.7`} strokeLinecap="round" />
             </svg>
           )}
-          <AnimatedScore value={alchemySuccessRate} streaming={streaming} />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <AnimatedScore value={alchemySuccessRate} streaming={streaming} />
+          </div>
         </div>
       </div>
 
