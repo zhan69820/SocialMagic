@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { motion, useSpring, useTransform } from "framer-motion";
 import { Copy, Check } from "lucide-react";
 import type { Platform } from "@/types/index";
+import PlatformIcon from "@/components/PlatformIcon";
+import { useTypewriter } from "@/hooks/useTypewriter";
+import { useHapticCopy } from "@/hooks/useHapticCopy";
 
 // =============================================================================
 // Platform visual config
@@ -11,12 +14,12 @@ import type { Platform } from "@/types/index";
 
 const PLATFORM_VISUAL: Record<
   Platform,
-  { label: string; glyph: string; accent: string; ring: string; bg: string }
+  { label: string; accent: string; ring: string; bg: string }
 > = {
-  xiaohongshu: { label: "小红书", glyph: "红", accent: "text-red-500", ring: "ring-red-200", bg: "bg-red-50" },
-  wechat: { label: "微信", glyph: "微", accent: "text-green-600", ring: "ring-green-200", bg: "bg-green-50" },
-  douyin: { label: "抖音", glyph: "抖", accent: "text-gray-900", ring: "ring-gray-300", bg: "bg-gray-50" },
-  weibo: { label: "微博", glyph: "博", accent: "text-orange-500", ring: "ring-orange-200", bg: "bg-orange-50" },
+  xiaohongshu: { label: "小红书", accent: "text-red-500", ring: "ring-red-200", bg: "bg-red-50" },
+  wechat: { label: "微信", accent: "text-green-600", ring: "ring-green-200", bg: "bg-green-50" },
+  douyin: { label: "抖音", accent: "text-gray-900", ring: "ring-gray-300", bg: "bg-gray-50" },
+  weibo: { label: "微博", accent: "text-orange-500", ring: "ring-orange-200", bg: "bg-orange-50" },
 };
 
 // =============================================================================
@@ -91,12 +94,28 @@ export default function SocialPostCard({
 }: SocialPostCardProps) {
   const [copied, setCopied] = useState(false);
   const visual = PLATFORM_VISUAL[platform];
+  const copyWithHaptic = useHapticCopy();
+
+  // Typewriter effect — only active during streaming
+  const { displayed, cursorVisible, isTyping, skipToEnd } = useTypewriter(
+    streaming ? body : "",
+    { charsPerTick: 3, tickInterval: 12 }
+  );
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(body);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const ok = await copyWithHaptic(body);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
+
+  // Click body to skip typewriter
+  const handleBodyClick = () => {
+    if (streaming && isTyping) skipToEnd();
+  };
+
+  const displayBody = streaming ? displayed : body;
 
   const inner = (
     <div className="group relative rounded-2xl bg-white backdrop-blur-xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_32px_rgba(0,0,0,0.08)] transition-shadow duration-300 overflow-hidden">
@@ -111,8 +130,8 @@ export default function SocialPostCard({
       {/* Header */}
       <div className="flex items-center justify-between px-5 pt-4 pb-2">
         <div className="flex items-center gap-2.5">
-          <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold ring-1 ${visual.ring} ${visual.bg} ${visual.accent}`}>
-            {visual.glyph}
+          <span className={`w-7 h-7 rounded-lg flex items-center justify-center ring-1 ${visual.ring} ${visual.bg} ${visual.accent}`}>
+            <PlatformIcon platform={platform} size={16} />
           </span>
           <div>
             <span className="text-[13px] font-medium text-gray-800 leading-tight">{visual.label}</span>
@@ -137,10 +156,10 @@ export default function SocialPostCard({
       </div>
 
       {/* Body */}
-      <div className="px-5 pb-4">
+      <div className="px-5 pb-4" onClick={handleBodyClick}>
         <div className="text-[14px] text-gray-600 whitespace-pre-wrap leading-[1.8] max-h-56 overflow-y-auto pr-1">
-          {body}
-          {streaming && (
+          {displayBody}
+          {streaming && cursorVisible && (
             <span className="inline-block w-[2px] h-[14px] bg-[#0071E3] ml-0.5 animate-pulse align-text-bottom" />
           )}
         </div>
@@ -173,14 +192,15 @@ export default function SocialPostCard({
     <motion.div
       layout={!!layoutId}
       layoutId={layoutId}
-      initial={{ opacity: 0, y: 24 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
+      initial={{ opacity: 0, y: 60, scale: 0.92 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95, y: 20 }}
       transition={{
-        delay: index * 0.08,
+        delay: index * 0.1,
         type: "spring",
-        stiffness: 260,
-        damping: 22,
+        stiffness: 200,
+        damping: 18,
+        mass: 0.8,
       }}
     >
       {inner}

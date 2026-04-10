@@ -13,6 +13,7 @@ import {
 import { useIdentity } from "@/providers/identity-provider";
 import SocialPostCard from "@/components/SocialPostCard";
 import VaultGrid, { resultsToVaultItems } from "@/components/VaultGrid";
+import PlatformIcon from "@/components/PlatformIcon";
 import type { Platform, Content, ProviderEntry } from "@/types/index";
 
 // =============================================================================
@@ -23,7 +24,6 @@ const PLATFORM_META: Record<
   Platform,
   {
     label: string;
-    glyph: string;
     color: string;
     bgActive: string;
     ringActive: string;
@@ -31,28 +31,24 @@ const PLATFORM_META: Record<
 > = {
   xiaohongshu: {
     label: "小红书",
-    glyph: "红",
     color: "text-red-500",
     bgActive: "bg-red-50",
     ringActive: "ring-red-200",
   },
   wechat: {
     label: "微信",
-    glyph: "微",
     color: "text-green-600",
     bgActive: "bg-green-50",
     ringActive: "ring-green-200",
   },
   douyin: {
     label: "抖音",
-    glyph: "抖",
     color: "text-gray-900",
     bgActive: "bg-gray-50",
     ringActive: "ring-gray-300",
   },
   weibo: {
     label: "微博",
-    glyph: "博",
     color: "text-orange-500",
     bgActive: "bg-orange-50",
     ringActive: "ring-orange-200",
@@ -140,6 +136,7 @@ export default function AlchemyWorkbench() {
   const [vaultItems, setVaultItems] = useState<
     ReturnType<typeof resultsToVaultItems>
   >([]);
+  const [inputFocused, setInputFocused] = useState(false);
 
   // --- Animated progress text ---
   useEffect(() => {
@@ -239,7 +236,6 @@ export default function AlchemyWorkbench() {
   const handleGenerate = useCallback(async () => {
     if (!content || !anonId || selectedPlatforms.size === 0) return;
 
-    // Read active provider
     let providerConfig: {
       type: string;
       apiKey: string;
@@ -276,7 +272,6 @@ export default function AlchemyWorkbench() {
     setCopies([]);
     setStreamingMap(new Map());
 
-    // Initialize streaming map
     const initialMap = new Map<Platform, string>();
     for (const p of Array.from(selectedPlatforms)) {
       initialMap.set(p, "");
@@ -346,7 +341,6 @@ export default function AlchemyWorkbench() {
         }
       }
 
-      // Push to vault
       if (completedResults.length > 0) {
         setVaultItems(
           resultsToVaultItems(completedResults, content?.title ?? undefined)
@@ -379,6 +373,13 @@ export default function AlchemyWorkbench() {
     selectedPlatforms.size > 0;
   const showWorkbench = phase === "ingested" || phase === "generating";
 
+  // Blur everything except the input area when focused
+  const blurClass =
+    inputFocused && phase === "idle"
+      ? "blur-[3px] opacity-40 pointer-events-none scale-[0.98]"
+      : "";
+  const blurTransition = "transition-all duration-500 ease-out";
+
   return (
     <div className="flex flex-col items-center">
       {/* Hero */}
@@ -386,7 +387,7 @@ export default function AlchemyWorkbench() {
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ ...SPRING_ENTER, delay: 0.05 }}
-        className="text-center mb-8"
+        className={`text-center mb-8 ${blurClass} ${blurTransition}`}
       >
         <h1 className="text-[32px] md:text-[40px] font-bold tracking-tight text-gray-900">
           SocialMagic
@@ -396,12 +397,12 @@ export default function AlchemyWorkbench() {
         </p>
       </motion.div>
 
-      {/* Spotlight input + file upload */}
+      {/* Spotlight input + file upload — always crisp */}
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ ...SPRING_ENTER, delay: 0.15 }}
-        className="w-full max-w-[600px]"
+        className="w-full max-w-[600px] relative z-10"
       >
         <div
           className="
@@ -419,6 +420,8 @@ export default function AlchemyWorkbench() {
             type="url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
             onKeyDown={(e) =>
               e.key === "Enter" && canIngest && handleIngest()
             }
@@ -539,11 +542,11 @@ export default function AlchemyWorkbench() {
                       `}
                     >
                       <span
-                        className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold transition-colors duration-200 ${
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors duration-200 ${
                           selected ? meta.color : "text-gray-300"
                         }`}
                       >
-                        {meta.glyph}
+                        <PlatformIcon platform={p} size={28} />
                       </span>
                       <span
                         className={`text-[12px] font-medium transition-colors duration-200 ${
@@ -586,7 +589,7 @@ export default function AlchemyWorkbench() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={SPRING_ENTER}
-            className="w-full max-w-[600px] mt-4 flex items-start gap-3 p-4 rounded-2xl bg-red-50/80 backdrop-blur-xl border border-red-100 text-[13px] text-red-600"
+            className={`w-full max-w-[600px] mt-4 flex items-start gap-3 p-4 rounded-2xl bg-red-50/80 backdrop-blur-xl border border-red-100 text-[13px] text-red-600 ${blurClass} ${blurTransition}`}
           >
             <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
             {errorMsg}
@@ -600,7 +603,7 @@ export default function AlchemyWorkbench() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="w-full max-w-[600px] mt-8 space-y-4"
+            className={`w-full max-w-[600px] mt-8 space-y-4 ${blurClass} ${blurTransition}`}
           >
             <p className="text-[11px] text-gray-400 uppercase tracking-wider font-medium">
               炼金进行中
@@ -683,7 +686,7 @@ export default function AlchemyWorkbench() {
       </AnimatePresence>
 
       {/* Vault */}
-      <div className="w-full max-w-[600px]">
+      <div className={`w-full max-w-[600px] ${blurClass} ${blurTransition}`}>
         <VaultGrid
           newItems={vaultItems.length > 0 ? vaultItems : undefined}
         />
