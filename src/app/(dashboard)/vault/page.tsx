@@ -171,8 +171,10 @@ export default function VaultPage() {
   }, [ready, loadAndMerge]);
 
   const handleDelete = async (id: string) => {
-    // Backend delete with ownership check
-    if (anonId) {
+    const item = items.find((i) => i.id === id);
+
+    // Only call backend for items that exist remotely
+    if (anonId && item && item.source !== "local") {
       try {
         const res = await fetch(`/api/posts/${id}`, {
           method: "DELETE",
@@ -184,7 +186,7 @@ export default function VaultPage() {
           return;
         }
       } catch {
-        // Network error — allow local-only delete as graceful fallback
+        // Network error — still allow local cleanup as graceful fallback
       }
     }
 
