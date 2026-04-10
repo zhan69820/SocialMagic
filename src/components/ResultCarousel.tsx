@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Copy, Check, RefreshCw, Repeat, Download, ClipboardList } from "lucide-react";
 import type { Platform } from "@/types/index";
 import PlatformIcon from "@/components/PlatformIcon";
-import { useTypewriter } from "@/hooks/useTypewriter";
 import { useHapticCopy } from "@/hooks/useHapticCopy";
 import { useTheme } from "@/providers/theme-provider";
 import { PLATFORM_THEME } from "@/lib/constants/platform-theme";
@@ -27,7 +26,6 @@ function AnimatedScore({ value }: { value: number }) {
     function tick(now: number) {
       const elapsed = now - start;
       const progress = Math.min(elapsed / duration, 1);
-      // Ease out cubic
       const eased = 1 - Math.pow(1 - progress, 3);
       setDisplay(Math.round(from + (to - from) * eased));
       if (progress < 1) requestAnimationFrame(tick);
@@ -37,9 +35,8 @@ function AnimatedScore({ value }: { value: number }) {
   }, [value]);
 
   return (
-    <span className={`tabular-nums font-bold text-[28px] ${getScoreColor(value)}`}>
+    <span className={`tabular-nums font-bold text-[22px] ${getScoreColor(value)}`}>
       {display}
-      <span className="text-[16px] font-medium ml-0.5 opacity-60">%</span>
     </span>
   );
 }
@@ -61,10 +58,6 @@ function StreamingCard({
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const streamingText = streamingMap.get(item.platform) || "";
-  const { displayed, cursorVisible } = useTypewriter(streamingText, {
-    charsPerTick: 3,
-    tickInterval: 12,
-  });
 
   return (
     <motion.div
@@ -80,16 +73,23 @@ function StreamingCard({
         </div>
         <div>
           <span className="text-[15px] font-semibold" style={{ color: "var(--text-primary)" }}>{pTheme.label}</span>
-          <span className="block text-[11px] text-violet-400 animate-pulse-glow">生成中...</span>
+          <span className="block text-[11px] text-violet-400">生成中...</span>
         </div>
+        {/* Minimal spinner */}
+        <div className="ml-auto w-4 h-4 rounded-full border-2 border-violet-400/30 border-t-violet-400 animate-spin" />
       </div>
-      <div className="px-6 pb-5">
-        <div className="text-[14px] whitespace-pre-wrap leading-[1.9] max-h-48 overflow-y-auto" style={{ color: isDark ? "#d1d5db" : "#4b5563" }}>
-          {displayed}
-          {cursorVisible && (
-            <span className="inline-block w-[2px] h-[14px] bg-violet-400 ml-0.5 animate-pulse align-text-bottom" />
-          )}
-        </div>
+      <div className="px-6 pb-5 min-h-[48px]">
+        {streamingText ? (
+          <div className="text-[14px] whitespace-pre-wrap leading-[1.9] max-h-48 overflow-y-auto" style={{ color: isDark ? "#d1d5db" : "#4b5563" }}>
+            {streamingText}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 py-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-violet-400/60 animate-bounce" style={{ animationDelay: "0ms" }} />
+            <div className="w-1.5 h-1.5 rounded-full bg-violet-400/60 animate-bounce" style={{ animationDelay: "150ms" }} />
+            <div className="w-1.5 h-1.5 rounded-full bg-violet-400/60 animate-bounce" style={{ animationDelay: "300ms" }} />
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -275,7 +275,7 @@ export default function ResultCarousel({
                       width="64"
                       height="64"
                       viewBox="0 0 64 64"
-                      className={`absolute ${getScoreColor(currentItem.alchemySuccessRate)}`}
+                      className={`absolute top-0 left-0 ${getScoreColor(currentItem.alchemySuccessRate)}`}
                       style={{ transform: "rotate(-90deg)" }}
                     >
                       <circle

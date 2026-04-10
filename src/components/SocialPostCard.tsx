@@ -32,7 +32,7 @@ function AnimatedScore({ value, streaming }: { value: number; streaming?: boolea
 
   return (
     <span className={`tabular-nums font-semibold text-[13px] ${getScoreColor(value)} ${getScoreGlow(value)}`}>
-      {text}%
+      {text}
     </span>
   );
 }
