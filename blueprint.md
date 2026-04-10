@@ -1,501 +1,287 @@
 # SocialMagic — 技术蓝图
 
-> 版本: v1.0 | 日期: 2026-04-09
+> 版本: v2.0 | 日期: 2026-04-10
 
 ---
 
-## 1. Supabase 数据库设计
+## 1. 数据库设计 (Supabase)
 
-### 1.1 ER 关系总览
+### 1.1 ER 关系
 
 ```
-users ──< user_preferences
-users ──< sessions ──< sources
-sessions ──< generated_copies
+profiles ──< contents ──< social_posts
 ```
 
-### 1.2 表结构定义
+### 1.2 表结构
 
-#### `users`
+#### `profiles`
 
 ```sql
-CREATE TABLE public.users (
+CREATE TABLE public.profiles (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  anon_id     TEXT UNIQUE NOT NULL,       -- 匿名用户标识（localStorage 存储）
-  email       TEXT,                       -- 可选，后续注册用
-  api_keys    JSONB DEFAULT '{}',         -- {"openai": "sk-...xxx", "claude": "sk-ant-...xxx"}
-  created_at  TIMESTAMPTZ DEFAULT now(),
-  updated_at  TIMESTAMPTZ DEFAULT now()
-);
-
--- API Key 加密：通过 Supabase Vault 或应用层 AES 加密后存储
--- 前端只传输加密后的值，永远不明文落库
-```
-
-#### `user_preferences`
-
-```sql
-CREATE TABLE public.user_preferences (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id     UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  platform    TEXT NOT NULL CHECK (platform IN ('xiaohongshu', 'wechat', 'douyin', 'weibo')),
-  is_enabled  BOOLEAN DEFAULT true,
-  default_tone TEXT DEFAULT '',
-  emoji_level  TEXT DEFAULT 'medium' CHECK (emoji_level IN ('high', 'medium', 'low')),
-  created_at  TIMESTAMPTZ DEFAULT now(),
-  updated_at  TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(user_id, platform)
-);
-```
-
-#### `sessions`
-
-```sql
-CREATE TABLE public.sessions (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id     UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  title       TEXT,                       -- 会话标题（自动从素材提取）
-  status      TEXT DEFAULT 'draft' CHECK (status IN ('draft', 'generating', 'completed', 'error')),
-  metadata    JSONB DEFAULT '{}',         -- 灵活扩展字段
+  anon_id     TEXT UNIQUE NOT NULL,
   created_at  TIMESTAMPTZ DEFAULT now(),
   updated_at  TIMESTAMPTZ DEFAULT now()
 );
 ```
 
-#### `sources`
+#### `contents`
 
 ```sql
-CREATE TABLE public.sources (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id  UUID NOT NULL REFERENCES public.sessions(id) ON DELETE CASCADE,
-  type        TEXT NOT NULL CHECK (type IN ('url', 'file', 'text')),
-  content     TEXT NOT NULL,              -- 解析后的纯文本
-  raw_url     TEXT,                       -- 原始 URL
-  file_name   TEXT,                       -- 原始文件名
-  file_type   TEXT,                       -- MIME type
-  metadata    JSONB DEFAULT '{}',         -- {title, description, image_urls[]}
-  created_at  TIMESTAMPTZ DEFAULT now()
-);
-```
-
-#### `generated_copies`
-
-```sql
-CREATE TABLE public.generated_copies (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id  UUID NOT NULL REFERENCES public.sessions(id) ON DELETE CASCADE,
-  source_id   UUID NOT NULL REFERENCES public.sources(id) ON DELETE CASCADE,
-  platform    TEXT NOT NULL CHECK (platform IN ('xiaohongshu', 'wechat', 'douyin', 'weibo')),
-  content     TEXT NOT NULL,              -- 生成的文案
-  tone_used   TEXT NOT NULL,
-  model_used  TEXT NOT NULL,              -- "openai/gpt-4o" | "anthropic/claude-sonnet-4-6"
-  version     INT DEFAULT 1,             -- 同一平台的生成版本号
-  token_count INT DEFAULT 0,
-  created_at  TIMESTAMPTZ DEFAULT now()
+CREATE TABLE public.contents (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id   UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  source_type  TEXT NOT NULL CHECK (source_type IN ('url', 'file', 'text')),
+  title        TEXT,
+  raw_url      TEXT,
+  raw_text     TEXT NOT NULL,
+  file_name    TEXT,
+  file_type    TEXT,
+  word_count   INT DEFAULT 0,
+  metadata     JSONB DEFAULT '{}',
+  created_at   TIMESTAMPTZ DEFAULT now(),
+  updated_at   TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX idx_copies_session ON public.generated_copies(session_id);
-CREATE INDEX idx_copies_source  ON public.generated_copies(source_id);
-CREATE INDEX idx_copies_platform ON public.generated_copies(platform);
+CREATE INDEX idx_contents_profile ON public.contents(profile_id);
 ```
 
-### 1.3 RLS（Row Level Security）策略
+#### `social_posts`
 
 ```sql
--- ================================
--- 启用 RLS
--- ================================
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_preferences ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.sources ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.generated_copies ENABLE ROW LEVEL SECURITY;
+CREATE TABLE public.social_posts (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id   UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  content_id   UUID NOT NULL REFERENCES public.contents(id) ON DELETE CASCADE,
+  platform     TEXT NOT NULL CHECK (platform IN ('xiaohongshu', 'wechat', 'douyin', 'weibo')),
+  body         TEXT NOT NULL,
+  tone         TEXT NOT NULL DEFAULT '',
+  model        TEXT NOT NULL,
+  version      INT NOT NULL DEFAULT 1,
+  token_count  INT DEFAULT 0,
+  char_count   INT DEFAULT 0,
+  metadata     JSONB DEFAULT '{}',
+  created_at   TIMESTAMPTZ DEFAULT now(),
+  updated_at   TIMESTAMPTZ DEFAULT now()
+);
 
--- ================================
--- users 表策略
--- ================================
--- 用户只能读取和修改自己的记录
-CREATE POLICY "users_select_own" ON public.users
-  FOR SELECT USING (anon_id = current_setting('request.jwt.claims')::json->>'anon_id');
+CREATE INDEX idx_posts_content ON public.social_posts(content_id);
+CREATE INDEX idx_posts_platform ON public.social_posts(platform);
 
-CREATE POLICY "users_insert_own" ON public.users
-  FOR INSERT WITH CHECK (anon_id = current_setting('request.jwt.claims')::json->>'anon_id');
-
-CREATE POLICY "users_update_own" ON public.users
-  FOR UPDATE USING (anon_id = current_setting('request.jwt.claims')::json->>'anon_id');
-
--- ================================
--- user_preferences 表策略
--- ================================
--- 通过 user_id 关联验证归属
-CREATE POLICY "prefs_select_own" ON public.user_preferences
-  FOR SELECT USING (
-    user_id IN (SELECT id FROM public.users WHERE anon_id = current_setting('request.jwt.claims')::json->>'anon_id')
-  );
-
-CREATE POLICY "prefs_insert_own" ON public.user_preferences
-  FOR INSERT WITH CHECK (
-    user_id IN (SELECT id FROM public.users WHERE anon_id = current_setting('request.jwt.claims')::json->>'anon_id')
-  );
-
-CREATE POLICY "prefs_update_own" ON public.user_preferences
-  FOR UPDATE USING (
-    user_id IN (SELECT id FROM public.users WHERE anon_id = current_setting('request.jwt.claims')::json->>'anon_id')
-  );
-
-CREATE POLICY "prefs_delete_own" ON public.user_preferences
-  FOR DELETE USING (
-    user_id IN (SELECT id FROM public.users WHERE anon_id = current_setting('request.jwt.claims')::json->>'anon_id')
-  );
-
--- ================================
--- sessions 表策略
--- ================================
-CREATE POLICY "sessions_select_own" ON public.sessions
-  FOR SELECT USING (
-    user_id IN (SELECT id FROM public.users WHERE anon_id = current_setting('request.jwt.claims')::json->>'anon_id')
-  );
-
-CREATE POLICY "sessions_insert_own" ON public.sessions
-  FOR INSERT WITH CHECK (
-    user_id IN (SELECT id FROM public.users WHERE anon_id = current_setting('request.jwt.claims')::json->>'anon_id')
-  );
-
-CREATE POLICY "sessions_update_own" ON public.sessions
-  FOR UPDATE USING (
-    user_id IN (SELECT id FROM public.users WHERE anon_id = current_setting('request.jwt.claims')::json->>'anon_id')
-  );
-
-CREATE POLICY "sessions_delete_own" ON public.sessions
-  FOR DELETE USING (
-    user_id IN (SELECT id FROM public.users WHERE anon_id = current_setting('request.jwt.claims')::json->>'anon_id')
-  );
-
--- ================================
--- sources 表策略（通过 session 归属链验证）
--- ================================
-CREATE POLICY "sources_select_own" ON public.sources
-  FOR SELECT USING (
-    session_id IN (
-      SELECT s.id FROM public.sessions s
-      WHERE s.user_id IN (SELECT id FROM public.users WHERE anon_id = current_setting('request.jwt.claims')::json->>'anon_id')
-    )
-  );
-
-CREATE POLICY "sources_insert_own" ON public.sources
-  FOR INSERT WITH CHECK (
-    session_id IN (
-      SELECT s.id FROM public.sessions s
-      WHERE s.user_id IN (SELECT id FROM public.users WHERE anon_id = current_setting('request.jwt.claims')::json->>'anon_id')
-    )
-  );
-
-CREATE POLICY "sources_delete_own" ON public.sources
-  FOR DELETE USING (
-    session_id IN (
-      SELECT s.id FROM public.sessions s
-      WHERE s.user_id IN (SELECT id FROM public.users WHERE anon_id = current_setting('request.jwt.claims')::json->>'anon_id')
-    )
-  );
-
--- ================================
--- generated_copies 表策略（通过 session 归属链验证）
--- ================================
-CREATE POLICY "copies_select_own" ON public.generated_copies
-  FOR SELECT USING (
-    session_id IN (
-      SELECT s.id FROM public.sessions s
-      WHERE s.user_id IN (SELECT id FROM public.users WHERE anon_id = current_setting('request.jwt.claims')::json->>'anon_id')
-    )
-  );
-
-CREATE POLICY "copies_insert_own" ON public.generated_copies
-  FOR INSERT WITH CHECK (
-    session_id IN (
-      SELECT s.id FROM public.sessions s
-      WHERE s.user_id IN (SELECT id FROM public.users WHERE anon_id = current_setting('request.jwt.claims')::json->>'anon_id')
-    )
-  );
-
-CREATE POLICY "copies_delete_own" ON public.generated_copies
-  FOR DELETE USING (
-    session_id IN (
-      SELECT s.id FROM public.sessions s
-      WHERE s.user_id IN (SELECT id FROM public.users WHERE anon_id = current_setting('request.jwt.claims')::json->>'anon_id')
-    )
-  );
+-- Auto-increment version per content+platform
+CREATE OR REPLACE FUNCTION get_next_post_version(content_uuid UUID, platform_name TEXT)
+RETURNS INT AS $$
+DECLARE next_v INT;
+BEGIN
+  SELECT COALESCE(MAX(version), 0) + 1 INTO next_v
+  FROM public.social_posts
+  WHERE content_id = content_uuid AND platform = platform_name;
+  RETURN next_v;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 ```
 
 ---
 
-## 2. LLM 统一适配层
+## 2. API 路由
 
-### 2.1 架构图
+| 路由 | 方法 | 功能 | 认证 |
+|------|------|------|------|
+| `/api/ingest` | POST | URL 抓取（含 YouTube/Bilibili 字幕） | `x-anon-id` |
+| `/api/upload` | POST | PDF/DOCX 文件上传与解析 | `x-anon-id` |
+| `/api/generate` | POST | SSE 流式多平台文案生成 | `x-anon-id` |
+| `/api/validate-key` | POST | AI API Key 有效性验证 | — |
+| `/api/posts` | GET | 获取用户所有已生成文案 | `x-anon-id` |
+| `/api/posts/[id]` | DELETE | 删除指定文案 | `x-anon-id` |
+| `/api/profiles/init` | POST | 初始化/同步用户 profile | — |
+
+### `/api/generate` 流程
 
 ```
-┌──────────────────────────────────────────────────┐
-│  Next.js Route Handler (API Layer)               │
-│                                                  │
-│  POST /api/generate                              │
-│    │                                             │
-│    ▼                                             │
-│  ┌──────────────────────────────────┐            │
-│  │  LLM Adapter (src/lib/llm/)      │            │
-│  │                                  │            │
-│  │  ┌────────────┐ ┌─────────────┐  │            │
-│  │  │ OpenAI     │ │ Anthropic   │  │            │
-│  │  │ Adapter    │ │ Adapter     │  │            │
-│  │  └─────┬──────┘ └──────┬──────┘  │            │
-│  │        └───────┬───────┘         │            │
-│  │                ▼                 │            │
-│  │        LLMProvider (interface)   │            │
-│  └──────────────────────────────────┘            │
-│                    │                             │
-│                    ▼                             │
-│          Platform Prompt Builder                 │
-│    (xiaohongshu / wechat / douyin / weibo)       │
-└──────────────────────────────────────────────────┘
+Client → POST /api/generate
+  body: { contentId, sourceText?, config: { platforms[], toneOverrides? }, providerConfig }
+                    │
+                    ▼
+        ┌─── Resolve identity (upsert profile) ───┐
+        │          Resolve source text              │
+        └────────────────┬─────────────────────────┘
+                         │
+                         ▼
+        ┌─── For each platform (Promise.allSettled) ───┐
+        │  createDynamicProvider(providerConfig)        │
+        │  streamText({ model, system, prompt, temp })  │
+        │  → SSE chunks: { type:"chunk", platform, text }│
+        │  → on complete: persist to social_posts        │
+        │  → SSE: { type:"complete", platform, body, … } │
+        └────────────────┬──────────────────────────────┘
+                         │
+                         ▼
+              SSE: { type:"done" }
 ```
 
-### 2.2 接口定义
+### `/api/validate-key` 流程
+
+```
+Client → POST /api/validate-key
+  body: { provider, apiKey, model, baseURL? }
+                    │
+                    ▼
+        createDynamicProvider(config)
+        generateText({ model, prompt: "回复「OK」", maxOutputTokens: 5 })
+                    │
+            ┌───────┴───────┐
+            ▼               ▼
+         { valid: true }   { valid: false, error }
+```
+
+---
+
+## 3. LLM 适配层
+
+使用 Vercel AI SDK (`ai` 包) + 官方 provider 包：
+
+```
+@ai-sdk/openai    → OpenAI + OpenAI-compatible (DeepSeek, Groq, etc.)
+@ai-sdk/anthropic → Anthropic Claude
+@ai-sdk/google    → Google Gemini
+```
+
+统一入口：`createDynamicProvider()` in `src/lib/services/generator.service.ts`
 
 ```typescript
-// src/lib/llm/types.ts
-
-interface LLMMessage {
-  role: "system" | "user" | "assistant";
-  content: string;
-}
-
-interface LLMGenerateOptions {
-  messages: LLMMessage[];
-  temperature?: number;      // 0.0 ~ 1.0
-  maxTokens?: number;
-  model?: string;            // 允许覆盖默认模型
-}
-
-interface LLMGenerateResult {
-  content: string;
+function createDynamicProvider(config: {
+  provider: "openai" | "anthropic" | "google" | "custom";
+  apiKey: string;
   model: string;
-  usage: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
-}
-
-interface LLMProvider {
-  readonly name: string;
-  readonly defaultModel: string;
-  generate(options: LLMGenerateOptions): Promise<LLMGenerateResult>;
-  validateApiKey(): Promise<boolean>;
-}
+  baseURL?: string;
+}) → LanguageModel   // Vercel AI SDK 统一接口
 ```
 
-### 2.3 OpenAI Adapter
-
-```typescript
-// src/lib/llm/openai.ts
-
-class OpenAIAdapter implements LLMProvider {
-  readonly name = "openai";
-  readonly defaultModel = "gpt-4o";
-
-  constructor(private apiKey: string) {}
-
-  async generate(options: LLMGenerateOptions): Promise<LLMGenerateResult> {
-    // 调用 POST https://api.openai.com/v1/chat/completions
-    // 映射到统一的 LLMGenerateResult
-  }
-
-  async validateApiKey(): Promise<boolean> {
-    // 调用 GET https://api.openai.com/v1/models 验证 key 有效性
-  }
-}
-```
-
-### 2.4 Anthropic Adapter
-
-```typescript
-// src/lib/llm/anthropic.ts
-
-class AnthropicAdapter implements LLMProvider {
-  readonly name = "anthropic";
-  readonly defaultModel = "claude-sonnet-4-6";
-
-  constructor(private apiKey: string) {}
-
-  async generate(options: LLMGenerateOptions): Promise<LLMGenerateResult> {
-    // 调用 POST https://api.anthropic.com/v1/messages
-    // 映射到统一的 LLMGenerateResult
-  }
-
-  async validateApiKey(): Promise<boolean> {
-    // 轻量调用验证 key 有效性
-  }
-}
-```
-
-### 2.5 Provider 工厂
-
-```typescript
-// src/lib/llm/factory.ts
-
-function createProvider(config: { provider: "openai" | "anthropic"; apiKey: string }): LLMProvider {
-  switch (config.provider) {
-    case "openai":
-      return new OpenAIAdapter(config.apiKey);
-    case "anthropic":
-      return new AnthropicAdapter(config.apiKey);
-  }
-}
-```
-
-### 2.6 平台 Prompt 模板
-
-```typescript
-// src/lib/prompts/platforms.ts
-
-const PLATFORM_PROMPTS: Record<Platform, PlatformPromptConfig> = {
-  xiaohongshu: {
-    systemPrompt: `你是一位资深小红书博主，擅长撰写种草笔记。
-要求：
-- 使用亲切自然的口吻，像朋友聊天一样
-- 大量使用 emoji 表情增加亲和力
-- 标题用 【】包裹，吸引眼球
-- 正文分段清晰，善用换行
-- 结尾添加话题标签 #标签
-- 控制在 ${PLATFORM_CONFIG.xiaohongshu.maxLength} 字以内`,
-    temperature: 0.8,
-  },
-  wechat: {
-    systemPrompt: `你是一位生活达人，擅长写微信朋友圈文案。
-要求：
-- 文字简洁有温度，像发朋友圈一样自然
-- 适度使用 emoji，不过度
-- 不需要话题标签
-- 可以加一句感悟或金句
-- 控制在 ${PLATFORM_CONFIG.wechat.maxLength} 字以内`,
-    temperature: 0.7,
-  },
-  douyin: {
-    systemPrompt: `你是一位短视频文案高手，擅长写抖音文案。
-要求：
-- 短平快，前 3 秒抓住眼球
-- 有节奏感，适合配音朗读
-- 使用 #话题标签
-- 语言有冲击力、有网感
-- 控制在 ${PLATFORM_CONFIG.douyin.maxLength} 字以内`,
-    temperature: 0.85,
-  },
-  weibo: {
-    systemPrompt: `你是一位微博达人，擅长写微博文案。
-要求：
-- 观点鲜明，有态度
-- 使用 #话题# 格式（双#号）
-- 语言简洁有力，有网感
-- 可以适当使用表情，但不过度
-- 控制在 ${PLATFORM_CONFIG.weibo.maxLength} 字以内`,
-    temperature: 0.75,
-  },
-};
-```
+Provider 配置存储在浏览器 `localStorage` key `sm_providers`，每个生成请求从前端传递。
 
 ---
 
-## 3. API Route 设计
+## 4. 前端架构
 
-| 路由 | 方法 | 功能 |
+### 4.1 技术栈
+
+- Next.js 16 App Router + React 19
+- Tailwind CSS v4 (CSS-first config, custom properties for theming)
+- Framer Motion (spring animations, AnimatePresence)
+- Lucide React (icons)
+- CSS custom properties for dual theme (`data-theme="dark|light"`)
+
+### 4.2 页面路由
+
+| 路由 | 文件 | 功能 |
 |------|------|------|
-| `/api/scrape` | POST | URL 网页正文抓取 |
-| `/api/upload` | POST | 文件上传与解析 |
-| `/api/generate` | POST | 文案生成（多平台并行） |
-| `/api/validate-key` | POST | API Key 有效性验证 |
-| `/api/sessions` | GET/POST | 会话列表 / 创建会话 |
-| `/api/sessions/[id]` | GET/DELETE | 会话详情 / 删除会话 |
+| `/` | `src/app/(dashboard)/page.tsx` | 炼金工作台（主页面） |
+| `/settings` | `src/app/(dashboard)/settings/page.tsx` | AI 服务商配置 |
+| `/vault` | `src/app/(dashboard)/vault/page.tsx` | 文案宝库 |
 
-### `/api/generate` 请求体
+### 4.3 组件层次
 
-```typescript
-interface GenerateRequest {
-  sessionId: string;
-  sourceId: string;
-  platforms: Platform[];
-  toneOverrides?: Partial<Record<Platform, string>>;
-  provider?: "openai" | "anthropic";
-}
+```
+layout.tsx (root)
+├── ThemeProvider (dark/light toggle, CSS custom properties)
+├── IdentityProvider (anonId from localStorage, upsert to Supabase)
+├── ParticleField (ambient floating particles)
+├── bg-orb × 3 (gradient blurs)
+└── (dashboard)/layout.tsx
+    ├── Sidebar (desktop: fixed left, mobile: drawer)
+    │   ├── NavItem × 3 (工作台/宝库/偏好)
+    │   └── ThemeToggle (Sun/Moon)
+    └── content area
+        ├── page.tsx → AlchemyWorkbench
+        │   ├── URL input + file upload + text input
+        │   ├── Platform selector (2×2 grid + tone presets)
+        │   ├── ResultCarousel (streaming + done states)
+        │   │   ├── StreamingCard × N (parallel SSE)
+        │   │   └── Carousel (slide animation, score ring)
+        │   │       ├── Copy / Regen / Copy All / Export TXT
+        │   │       └── Dots + arrows navigation
+        │   └── VaultGrid (masonry grid, AnimatePresence)
+        ├── settings/page.tsx (provider cards, validate button)
+        └── vault/page.tsx (local + remote merge, masonry grid)
 ```
 
-### `/api/generate` 响应体
+### 4.4 核心交互流程
 
-```typescript
-interface GenerateResponse {
-  copies: {
-    platform: Platform;
-    content: string;
-    model: string;
-    tokenCount: number;
-    version: number;
-  }[];
-  errors: {
-    platform: Platform;
-    message: string;
-  }[];
-}
 ```
+idle → [输入 URL / 上传文件 / 直接输入文本]
+  → ingesting → ingested
+    → [选择平台 × N] [选择语调]
+      → generating (SSE streaming)
+        → done → [复制 / 重炼 / 导出 / 新炼金]
+```
+
+### 4.5 共享工具模块
+
+| 模块 | 导出 | 用途 |
+|------|------|------|
+| `lib/utils/calculate-word-count` | `calculateWordCount(text)` | CJK + Latin 混合字数统计 |
+| `lib/utils/map-row-to-content` | `mapRowToContent(row, profileId)` | Supabase row → Content 类型 |
+| `lib/utils/score-helpers` | `getScoreColor`, `getScoreGlow`, `getScoreLabel` | 炼金分数视觉 |
+| `lib/utils/vault-storage` | `VaultItem`, `loadVault`, `saveVault` | 宝库 localStorage CRUD |
+| `lib/constants/platform-theme` | `PLATFORM_THEME`, `TONE_PRESETS` | 平台视觉 + 语调预设 |
 
 ---
 
-## 4. 文件结构规划
+## 5. 文件结构
 
 ```
 src/
 ├── app/
-│   ├── layout.tsx
-│   ├── page.tsx                     # 主页面
-│   ├── api/
-│   │   ├── scrape/route.ts
-│   │   ├── upload/route.ts
-│   │   ├── generate/route.ts
-│   │   ├── validate-key/route.ts
-│   │   └── sessions/
-│   │       ├── route.ts
-│   │       └── [id]/route.ts
-│   └── globals.css
+│   ├── layout.tsx                         # Root: theme orbs, particles, providers
+│   ├── globals.css                        # Dual-theme CSS custom properties + animations
+│   ├── (dashboard)/
+│   │   ├── layout.tsx                     # Sidebar + content area
+│   │   ├── page.tsx                       # → AlchemyWorkbench
+│   │   ├── settings/page.tsx              # Provider config + validate
+│   │   └── vault/page.tsx                 # Local + remote vault
+│   └── api/
+│       ├── ingest/route.ts                # URL → scrape/YouTube/Bilibili → Content
+│       ├── upload/route.ts                # PDF/DOCX → parse → Content
+│       ├── generate/route.ts              # SSE streaming multi-platform generation
+│       ├── validate-key/route.ts          # API key validation
+│       ├── posts/
+│       │   ├── route.ts                   # GET all posts
+│       │   └── [id]/route.ts              # DELETE single post
+│       └── profiles/
+│           └── init/route.ts              # Upsert profile + sync providers
 ├── components/
-│   ├── SourceInput.tsx               # 素材输入（URL/文件/手动）
-│   ├── PlatformSelector.tsx          # 平台选择卡片
-│   ├── CopyCard.tsx                  # 单平台文案展示卡片
-│   ├── CopyResults.tsx               # 结果展示区容器
-│   ├── SettingsModal.tsx             # API Key 设置弹窗
-│   ├── HistoryDrawer.tsx             # 历史记录抽屉
-│   └── Header.tsx                    # 顶部导航
+│   ├── AlchemyWorkbench.tsx               # Main workbench (phase machine)
+│   ├── ResultCarousel.tsx                 # Full-width carousel (stream + done)
+│   ├── SocialPostCard.tsx                 # Glass card (used in vault)
+│   ├── VaultGrid.tsx                      # Masonry grid for vault items
+│   ├── PlatformIcon.tsx                   # Hand-crafted SVG icons × 4
+│   └── ParticleField.tsx                  # Ambient floating particles
+├── hooks/
+│   ├── useTypewriter.ts                   # rAF-based character reveal
+│   └── useHapticCopy.ts                   # navigator.vibrate on mobile copy
+├── providers/
+│   ├── theme-provider.tsx                 # Dark/light theme context
+│   └── identity-provider.tsx              # Anon ID + Supabase upsert
 ├── lib/
-│   ├── llm/
-│   │   ├── types.ts                 # LLM 通用接口
-│   │   ├── openai.ts                # OpenAI 适配器
-│   │   ├── anthropic.ts             # Anthropic 适配器
-│   │   ├── factory.ts               # Provider 工厂
-│   │   └── index.ts                 # 统一导出
-│   ├── prompts/
-│   │   ├── platforms.ts             # 各平台 Prompt 模板
-│   │   └── builder.ts               # Prompt 组装器
+│   ├── services/
+│   │   ├── generator.service.ts           # Prompts, provider factory, alchemy score
+│   │   └── scraper.service.ts            # URL → ScrapedContent
 │   ├── scraper/
-│   │   ├── fetch-page.ts            # 网页抓取逻辑
-│   │   └── extract-content.ts       # 正文提取
+│   │   ├── fetch-page.ts                 # HTTP fetch with retry
+│   │   ├── extract-content.ts            # HTML → Markdown
+│   │   └── video-transcript.ts           # YouTube + Bilibili transcript
 │   ├── parsers/
-│   │   ├── pdf.ts                   # PDF 解析
-│   │   ├── docx.ts                  # Word 解析
-│   │   └── image.ts                 # 图片 OCR（可选）
+│   │   ├── pdf.ts                        # PDF text extraction
+│   │   └── docx.ts                       # DOCX text extraction
 │   ├── supabase/
-│   │   ├── client.ts                # Supabase 客户端
-│   │   └── middleware.ts            # Auth 中间件
+│   │   └── client.ts                     # Server-side Supabase client
+│   ├── constants/
+│   │   └── platform-theme.ts             # PLATFORM_THEME + TONE_PRESETS
 │   └── utils/
-│       ├── crypto.ts                # API Key 加解密
-│       └── platform-config.ts       # 平台配置常量
-├── types/
-│   └── index.ts                     # 全局类型定义
-└── hooks/
-    ├── useGenerate.ts               # 文案生成 hook
-    └── useClipboard.ts              # 剪贴板 hook
+│       ├── calculate-word-count.ts
+│       ├── map-row-to-content.ts
+│       ├── score-helpers.ts
+│       └── vault-storage.ts
+└── types/
+    └── index.ts                           # Platform, Content, SocialPost, GeneratorConfig, etc.
 ```
