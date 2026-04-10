@@ -11,6 +11,8 @@ import {
   Paperclip,
   Sparkles,
   Wand2,
+  Type,
+  ChevronDown,
 } from "lucide-react";
 import { useIdentity } from "@/providers/identity-provider";
 import { useTheme } from "@/providers/theme-provider";
@@ -19,6 +21,7 @@ import ResultCarousel from "@/components/ResultCarousel";
 import VaultGrid, { resultsToVaultItems } from "@/components/VaultGrid";
 import PlatformIcon from "@/components/PlatformIcon";
 import type { Platform, Content, ProviderEntry } from "@/types/index";
+import { TONE_PRESETS } from "@/lib/constants/platform-theme";
 
 // =============================================================================
 // Platform meta — theme-aware
@@ -152,6 +155,9 @@ export default function AlchemyWorkbench() {
   const [streamingMap, setStreamingMap] = useState<Map<Platform, string>>(new Map());
   const [vaultItems, setVaultItems] = useState<ReturnType<typeof resultsToVaultItems>>([]);
   const [inputFocused, setInputFocused] = useState(false);
+  const [showTextInput, setShowTextInput] = useState(false);
+  const [textInput, setTextInput] = useState("");
+  const [toneOverrides, setToneOverrides] = useState<Partial<Record<Platform, string>>>({});
 
   // --- Animated progress text ---
   useEffect(() => {
@@ -192,6 +198,29 @@ export default function AlchemyWorkbench() {
       setErrorMsg((err as Error).message);
     }
   }, [url, anonId]);
+
+  // --- Direct text input ---
+  const handleTextSubmit = useCallback(() => {
+    if (!textInput.trim()) return;
+    const now = new Date().toISOString();
+    setContent({
+      id: crypto.randomUUID(),
+      profileId: anonId || "anonymous",
+      sourceType: "text",
+      title: textInput.trim().slice(0, 30) + (textInput.length > 30 ? "..." : ""),
+      rawUrl: null,
+      rawText: textInput.trim(),
+      fileName: null,
+      fileType: null,
+      wordCount: textInput.trim().length,
+      metadata: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+    setPhase("ingested");
+    setErrorMsg("");
+    setCopies([]);
+  }, [textInput, anonId]);
 
   // --- Upload file ---
   const handleFileUpload = useCallback(async (file: File) => {
@@ -253,7 +282,7 @@ export default function AlchemyWorkbench() {
       const response = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-anon-id": anonId },
-        body: JSON.stringify({ contentId: content.id, sourceText: content.rawText, config: { platforms: Array.from(selectedPlatforms) }, providerConfig }),
+        body: JSON.stringify({ contentId: content.id, sourceText: content.rawText, config: { platforms: Array.from(selectedPlatforms), toneOverrides }, providerConfig }),
       });
       if (!response.body) throw new Error("浏览器不支持流式响应");
       const reader = response.body.getReader();
@@ -294,11 +323,86 @@ export default function AlchemyWorkbench() {
       setErrorMsg((err as Error).message);
       setPhase("ingested");
     }
-  }, [content, anonId, selectedPlatforms]);
+  }, [content, anonId, selectedPlatforms, toneOverrides]);
+
+  // --- Single-platform regenerate ---
+  const handleRegenPlatform = useCallback(async (platform: Platform) => {
+    if (!content || !anonId) return;
+    let providerConfig: { type: string; apiKey: string; model: string; baseURL?: string } | null = null;
+    try {
+      const raw = localStorage.getItem("sm_providers");
+      if (raw) {
+        const storage = JSON.parse(raw);
+        const active = (storage.providers as ProviderEntry[])?.find((p) => p.id === storage.activeId);
+        if (active?.apiKey) {
+          providerConfig = { type: active.type, apiKey: active.apiKey, model: active.model, baseURL: active.baseURL };
+        }
+      }
+    } catch { /* fall through */ }
+    if (!providerConfig) { setErrorMsg("请先在「偏好设置」中配置 AI 服务商的 API Key"); return; }
+
+    // Remove the old copy for this platform
+    setCopies((prev) => prev.filter((c) => c.platform !== platform));
+    const regenMap = new Map<Platform, string>();
+    regenMap.set(platform, "");
+    setStreamingMap(regenMap);
+
+    try {
+      const toneForPlatform = toneOverrides[platform] ? { [platform]: toneOverrides[platform] } : {};
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-anon-id": anonId },
+        body: JSON.stringify({
+          contentId: content.id,
+          sourceText: content.rawText,
+          config: { platforms: [platform], toneOverrides: toneForPlatform },
+          providerConfig,
+        }),
+      });
+      if (!response.body) throw new Error("浏览器不支持流式响应");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let regenResult: GeneratedCopy | null = null;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.type === "chunk" && data.platform === platform && data.text) {
+              setStreamingMap((prev) => {
+                const next = new Map(prev);
+                next.set(platform, (next.get(platform) || "") + data.text);
+                return next;
+              });
+            } else if (data.type === "complete" && data.platform === platform) {
+              regenResult = { platform: data.platform, body: data.body, tone: data.tone || "", alchemySuccessRate: data.alchemySuccessRate || 0 };
+            } else if (data.type === "error") {
+              setErrorMsg(data.message);
+            }
+          } catch { /* skip */ }
+        }
+      }
+      if (regenResult) {
+        setCopies((prev) => [...prev.filter((c) => c.platform !== platform), regenResult!]);
+        setVaultItems((prev) => [...resultsToVaultItems([regenResult!], content?.title ?? undefined), ...prev]);
+      }
+      setStreamingMap(new Map());
+    } catch (err) {
+      setErrorMsg((err as Error).message);
+      setStreamingMap(new Map());
+    }
+  }, [content, anonId, toneOverrides]);
 
   const reset = () => {
     setPhase("idle"); setUrl(""); setContent(null); setCopies([]);
     setStreamingMap(new Map()); setSelectedPlatforms(new Set()); setProgressMsg(""); setErrorMsg("");
+    setTextInput(""); setShowTextInput(false); setToneOverrides({});
   };
 
   const canIngest = url.trim().length > 0 && phase === "idle";
@@ -395,6 +499,63 @@ export default function AlchemyWorkbench() {
             )}
           </div>
         </div>
+
+        {/* Text input toggle */}
+        {phase === "idle" && (
+          <motion.button
+            onClick={() => setShowTextInput((v) => !v)}
+            className="mt-3 mx-auto flex items-center gap-1.5 text-[12px] transition-colors duration-200 hover:text-violet-400"
+            style={{ color: "var(--text-quaternary)" }}
+          >
+            <Type className="w-3.5 h-3.5" />
+            直接输入文本
+            <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${showTextInput ? "rotate-180" : ""}`} />
+          </motion.button>
+        )}
+
+        {/* Collapsible text input */}
+        <AnimatePresence>
+          {showTextInput && phase === "idle" && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
+              className="overflow-hidden"
+            >
+              <div className="mt-3 w-full max-w-[720px] mx-auto">
+                <div className="gradient-border">
+                  <div
+                    className="rounded-2xl backdrop-blur-xl border overflow-hidden"
+                    style={{ background: "var(--bg-input)", borderColor: "var(--bg-card-border)" }}
+                  >
+                    <textarea
+                      value={textInput}
+                      onChange={(e) => setTextInput(e.target.value)}
+                      placeholder="在这里粘贴或输入文案素材内容..."
+                      rows={6}
+                      className="w-full bg-transparent px-5 py-4 text-[14px] outline-none resize-none placeholder:opacity-40 leading-relaxed"
+                      style={{ color: "var(--text-primary)" }}
+                    />
+                    <div className="flex items-center justify-between px-4 py-2.5" style={{ borderTop: "1px solid var(--bg-card-border)" }}>
+                      <span className="text-[11px]" style={{ color: "var(--text-quaternary)" }}>
+                        {textInput.length} 字
+                      </span>
+                      <motion.button
+                        onClick={handleTextSubmit}
+                        disabled={!textInput.trim()}
+                        whileTap={textInput.trim() ? { scale: 0.95 } : {}}
+                        className="px-5 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-cyan-500 text-white text-[12px] font-semibold disabled:opacity-25 disabled:cursor-not-allowed transition-opacity shadow-[0_2px_12px_rgba(139,92,246,0.25)]"
+                      >
+                        投入炼金炉
+                      </motion.button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
 
       {/* Progress ritual */}
@@ -447,62 +608,98 @@ export default function AlchemyWorkbench() {
                 {(Object.keys(PLATFORM_META) as Platform[]).map((p, idx) => {
                   const meta = PLATFORM_META[p];
                   const selected = selectedPlatforms.has(p);
+                  const presets = TONE_PRESETS[p];
+                  const activeTone = toneOverrides[p];
                   return (
-                    <motion.button
-                      key={p}
-                      onClick={() => {
-                        setSelectedPlatforms((prev) => {
-                          const next = new Set(prev);
-                          next.has(p) ? next.delete(p) : next.add(p);
-                          return next;
-                        });
-                      }}
-                      whileTap={{ scale: 0.93 }}
-                      whileHover={{ y: -3 }}
-                      animate={{
-                        scale: selected ? 1.03 : 1,
-                        boxShadow: selected
-                          ? `0 8px 30px rgba(0,0,0,0.2), 0 0 20px rgba(139,92,246,0.15)`
-                          : "0 2px 12px rgba(0,0,0,0.1)",
-                      }}
-                      transition={{ ...SPRING_TAP, delay: idx * 0.03 }}
-                      className={`
-                        relative flex flex-col items-center gap-2.5 px-4 py-5 rounded-2xl
-                        border backdrop-blur-xl transition-colors duration-300 overflow-hidden
-                        ${selected
-                          ? `bg-gradient-to-br ${meta.gradientFrom} ${meta.gradientTo} border-violet-500/20`
-                          : ""
-                        }
-                      `}
-                      style={!selected ? { background: "var(--bg-card)", borderColor: "var(--bg-card-border)" } : undefined}
-                    >
-                      {/* Selected check mark */}
-                      {selected && (
-                        <motion.div
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          className="absolute top-2 right-2 w-5 h-5 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center"
-                        >
-                          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M2 6l3 3 5-5" />
-                          </svg>
-                        </motion.div>
-                      )}
-
-                      <motion.div
-                        className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 ${selected ? meta.badgeBg : "bg-white/[0.04]"}`}
-                        animate={selected ? { rotate: [0, -5, 5, 0] } : {}}
-                        transition={{ duration: 0.4 }}
+                    <div key={p} className="flex flex-col gap-2">
+                      <motion.button
+                        onClick={() => {
+                          setSelectedPlatforms((prev) => {
+                            const next = new Set(prev);
+                            next.has(p) ? next.delete(p) : next.add(p);
+                            return next;
+                          });
+                        }}
+                        whileTap={{ scale: 0.93 }}
+                        whileHover={{ y: -3 }}
+                        animate={{
+                          scale: selected ? 1.03 : 1,
+                          boxShadow: selected
+                            ? `0 8px 30px rgba(0,0,0,0.2), 0 0 20px rgba(139,92,246,0.15)`
+                            : "0 2px 12px rgba(0,0,0,0.1)",
+                        }}
+                        transition={{ ...SPRING_TAP, delay: idx * 0.03 }}
+                        className={`
+                          relative flex flex-col items-center gap-2.5 px-4 py-5 rounded-2xl
+                          border backdrop-blur-xl transition-colors duration-300 overflow-hidden
+                          ${selected
+                            ? `bg-gradient-to-br ${meta.gradientFrom} ${meta.gradientTo} border-violet-500/20`
+                            : ""
+                          }
+                        `}
+                        style={!selected ? { background: "var(--bg-card)", borderColor: "var(--bg-card-border)" } : undefined}
                       >
-                        <PlatformIcon platform={p} size={26} />
-                      </motion.div>
-                      <span className={`text-[13px] font-semibold transition-colors duration-200 ${selected ? (isDark ? "text-white/90" : "text-gray-800") : "text-gray-500"}`}>
-                        {meta.label}
-                      </span>
-                      <span className="text-[10px] transition-colors duration-200" style={{ color: "var(--text-quaternary)" }}>
-                        {meta.subtitle}
-                      </span>
-                    </motion.button>
+                        {selected && (
+                          <motion.div
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            className="absolute top-2 right-2 w-5 h-5 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center"
+                          >
+                            <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M2 6l3 3 5-5" />
+                            </svg>
+                          </motion.div>
+                        )}
+
+                        <motion.div
+                          className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 ${selected ? meta.badgeBg : "bg-white/[0.04]"}`}
+                          animate={selected ? { rotate: [0, -5, 5, 0] } : {}}
+                          transition={{ duration: 0.4 }}
+                        >
+                          <PlatformIcon platform={p} size={26} />
+                        </motion.div>
+                        <span className={`text-[13px] font-semibold transition-colors duration-200 ${selected ? (isDark ? "text-white/90" : "text-gray-800") : "text-gray-500"}`}>
+                          {meta.label}
+                        </span>
+                        <span className="text-[10px] transition-colors duration-200" style={{ color: "var(--text-quaternary)" }}>
+                          {meta.subtitle}
+                        </span>
+                      </motion.button>
+
+                      {/* Tone presets */}
+                      <AnimatePresence>
+                        {selected && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="flex flex-wrap gap-1 overflow-hidden"
+                          >
+                            {presets.map((preset) => (
+                              <button
+                                key={preset.value}
+                                onClick={() =>
+                                  setToneOverrides((prev) => ({
+                                    ...prev,
+                                    [p]: activeTone === preset.value ? undefined : preset.value,
+                                  }))
+                                }
+                                className={`
+                                  px-2 py-0.5 rounded-md text-[10px] font-medium transition-all duration-200
+                                  ${activeTone === preset.value
+                                    ? "bg-violet-500/20 text-violet-400 ring-1 ring-violet-500/30"
+                                    : "bg-white/[0.04] text-gray-500 hover:text-gray-300 hover:bg-white/[0.08]"
+                                  }
+                                `}
+                              >
+                                {preset.label}
+                              </button>
+                            ))}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
                   );
                 })}
               </div>
@@ -580,6 +777,7 @@ export default function AlchemyWorkbench() {
             <ResultCarousel
               items={copies}
               onReset={reset}
+              onRegenPlatform={handleRegenPlatform}
             />
           </motion.div>
         )}

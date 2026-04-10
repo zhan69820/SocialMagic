@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Copy, Check, RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Check, RefreshCw, Repeat } from "lucide-react";
 import type { Platform } from "@/types/index";
 import PlatformIcon from "@/components/PlatformIcon";
 import { useTypewriter } from "@/hooks/useTypewriter";
@@ -115,6 +115,7 @@ interface ResultCarouselProps {
   streamingMap?: Map<Platform, string>;
   isStreaming?: boolean;
   onReset?: () => void;
+  onRegenPlatform?: (platform: Platform) => void;
 }
 
 export default function ResultCarousel({
@@ -122,6 +123,7 @@ export default function ResultCarousel({
   streamingMap,
   isStreaming = false,
   onReset,
+  onRegenPlatform,
 }: ResultCarouselProps) {
   const [current, setCurrent] = useState(0);
   const [direction, setDirection] = useState(0);
@@ -285,23 +287,37 @@ export default function ResultCarousel({
                 <span className="text-[12px]" style={{ color: "var(--text-quaternary)" }}>
                   {currentItem.body.length} 字
                 </span>
-                <motion.button
-                  onClick={() => handleCopy(currentItem.body, current)}
-                  whileTap={{ scale: 0.92 }}
-                  className={`
-                    flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-medium transition-all duration-200
-                    ${copiedIdx === current
-                      ? "bg-emerald-500/20 text-emerald-400"
-                      : "bg-gradient-to-r from-violet-600 to-cyan-500 text-white shadow-[0_2px_12px_rgba(139,92,246,0.25)] hover:shadow-[0_4px_20px_rgba(139,92,246,0.35)]"
-                    }
-                  `}
-                >
-                  {copiedIdx === current ? (
-                    <><Check className="w-4 h-4" /> 已复制</>
-                  ) : (
-                    <><Copy className="w-4 h-4" /> 复制文案</>
+                <div className="flex items-center gap-2">
+                  {onRegenPlatform && (
+                    <motion.button
+                      onClick={() => onRegenPlatform(currentItem.platform)}
+                      whileTap={{ scale: 0.92 }}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12px] font-medium transition-colors duration-200 hover:bg-white/[0.08]"
+                      style={{ background: "var(--bg-card)", color: "var(--text-secondary)", border: "1px solid var(--bg-card-border)" }}
+                      title="重新生成该平台文案"
+                    >
+                      <Repeat className="w-3.5 h-3.5" />
+                      重炼
+                    </motion.button>
                   )}
-                </motion.button>
+                  <motion.button
+                    onClick={() => handleCopy(currentItem.body, current)}
+                    whileTap={{ scale: 0.92 }}
+                    className={`
+                      flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-medium transition-all duration-200
+                      ${copiedIdx === current
+                        ? "bg-emerald-500/20 text-emerald-400"
+                        : "bg-gradient-to-r from-violet-600 to-cyan-500 text-white shadow-[0_2px_12px_rgba(139,92,246,0.25)] hover:shadow-[0_4px_20px_rgba(139,92,246,0.35)]"
+                      }
+                    `}
+                  >
+                    {copiedIdx === current ? (
+                      <><Check className="w-4 h-4" /> 已复制</>
+                    ) : (
+                      <><Copy className="w-4 h-4" /> 复制文案</>
+                    )}
+                  </motion.button>
+                </div>
               </div>
             </motion.div>
           </AnimatePresence>

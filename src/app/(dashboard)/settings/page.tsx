@@ -11,6 +11,9 @@ import {
   Shield,
   Plus,
   Trash2,
+  Loader2,
+  Zap,
+  AlertCircle,
 } from "lucide-react";
 import { useIdentity } from "@/providers/identity-provider";
 import type { ProviderEntry } from "@/types/index";
@@ -110,6 +113,8 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [lastSnapshot, setLastSnapshot] = useState("");
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
+  const [validating, setValidating] = useState<string | null>(null);
+  const [validated, setValidated] = useState<Record<string, "ok" | "fail">>({});
 
   useEffect(() => {
     const loaded = loadProviders();
@@ -164,6 +169,36 @@ export default function SettingsPage() {
       next.delete(id);
       return next;
     });
+  };
+
+  const validateKey = async (provider: ProviderEntry) => {
+    if (!provider.apiKey || !provider.model) return;
+    setValidating(provider.id);
+    setValidated((prev) => {
+      const next = { ...prev };
+      delete next[provider.id];
+      return next;
+    });
+    try {
+      const res = await fetch("/api/validate-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: provider.type,
+          apiKey: provider.apiKey,
+          model: provider.model,
+          baseURL: provider.baseURL,
+        }),
+      });
+      const data = await res.json();
+      setValidated((prev) => ({
+        ...prev,
+        [provider.id]: data.valid ? "ok" : "fail",
+      }));
+    } catch {
+      setValidated((prev) => ({ ...prev, [provider.id]: "fail" }));
+    }
+    setValidating(null);
   };
 
   const handleSave = async () => {
@@ -372,6 +407,46 @@ export default function SettingsPage() {
                       className="flex-1 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-[13px] text-white/90 placeholder:text-gray-700 outline-none focus:border-violet-500/40 transition-colors duration-200 min-w-0"
                     />
                   </div>
+
+                  {/* Validate key button */}
+                  {provider.apiKey && provider.model && (
+                    <div className="flex items-center gap-2 pt-1">
+                      <div className="w-16 shrink-0" />
+                      <motion.button
+                        onClick={() => validateKey(provider)}
+                        disabled={validating === provider.id}
+                        whileTap={validating !== provider.id ? { scale: 0.95 } : {}}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-colors duration-200 border"
+                        style={{
+                          borderColor: validated[provider.id] === "ok"
+                            ? "rgba(16,185,129,0.3)"
+                            : validated[provider.id] === "fail"
+                              ? "rgba(239,68,68,0.3)"
+                              : "var(--bg-card-border)",
+                          color: validated[provider.id] === "ok"
+                            ? "#10b981"
+                            : validated[provider.id] === "fail"
+                              ? "#ef4444"
+                              : "var(--text-secondary)",
+                          background: validated[provider.id] === "ok"
+                            ? "rgba(16,185,129,0.08)"
+                            : validated[provider.id] === "fail"
+                              ? "rgba(239,68,68,0.08)"
+                              : "transparent",
+                        }}
+                      >
+                        {validating === provider.id ? (
+                          <><Loader2 className="w-3 h-3 animate-spin" /> 验证中...</>
+                        ) : validated[provider.id] === "ok" ? (
+                          <><CheckCircle2 className="w-3 h-3" /> 验证通过</>
+                        ) : validated[provider.id] === "fail" ? (
+                          <><AlertCircle className="w-3 h-3" /> 验证失败</>
+                        ) : (
+                          <><Zap className="w-3 h-3" /> 验证密钥</>
+                        )}
+                      </motion.button>
+                    </div>
+                  )}
                 </div>
               </div>
             );
